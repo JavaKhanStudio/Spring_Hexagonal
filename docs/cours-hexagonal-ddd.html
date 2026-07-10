@@ -1,0 +1,1951 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="Cours : architecture hexagonale et Domain-Driven Design, illustres par le code du projet canicule (fr.meteo).">
+<title>Cours - Architecture hexagonale &amp; DDD (canicule)</title>
+<style>
+  :root {
+    --bg: #eef3f8; --bg-2: #ffffff; --ink: #14213a; --ink-soft: #4a5a75; --ink-faint: #8494ab;
+    --line: #d6e0ee; --line-strong: #b7c6dc;
+    --froid: #00a5c4; --domaine: #14b3a2; --application: #4f83c0; --tiede: #f2a71b; --chaud: #ef5d3a; --canicule: #d92b4b;
+    --code-bg: #0e1e34; --code-ink: #d7e3f4; --code-kw: #6fb7ff; --code-str: #7fd0a6; --code-com: #6b7f9e; --code-ann: #f2b45a; --code-type: #67d6c6;
+    --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --shadow: 0 1px 2px rgba(20,33,58,.06), 0 14px 40px rgba(20,33,58,.12);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0a1424; --bg-2: #0f1f38; --ink: #e8eff8; --ink-soft: #a9b8ce; --ink-faint: #647691;
+      --line: #21344f; --line-strong: #33507a; --code-bg: #081222; --shadow: 0 1px 2px rgba(0,0,0,.35), 0 18px 50px rgba(0,0,0,.5); }
+  }
+  :root[data-theme="dark"] { --bg: #0a1424; --bg-2: #0f1f38; --ink: #e8eff8; --ink-soft: #a9b8ce; --ink-faint: #647691;
+      --line: #21344f; --line-strong: #33507a; --code-bg: #081222; --shadow: 0 1px 2px rgba(0,0,0,.35), 0 18px 50px rgba(0,0,0,.5); }
+  :root[data-theme="light"] { --bg: #eef3f8; --bg-2: #ffffff; --ink: #14213a; --ink-soft: #4a5a75; --ink-faint: #8494ab;
+      --line: #d6e0ee; --line-strong: #b7c6dc; --code-bg: #0e1e34; --shadow: 0 1px 2px rgba(20,33,58,.06), 0 14px 40px rgba(20,33,58,.12); }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; overflow: hidden; }
+
+  .deck { position: fixed; inset: 0; }
+  .slide {
+    position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center;
+    padding: clamp(28px, 5vh, 58px) clamp(24px, 6vw, 100px) clamp(64px, 9vh, 86px);
+    opacity: 0; visibility: hidden; transform: translateY(14px);
+    transition: opacity .45s ease, transform .45s ease, visibility .45s;
+    overflow-y: auto; overflow-x: hidden;
+  }
+  .slide.active { opacity: 1; visibility: visible; transform: none; }
+  @media (prefers-reduced-motion: reduce) { .slide { transition: opacity .001s; transform: none; } }
+
+  .num { font-family: var(--font-mono); font-size: 12.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--froid); display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .num::before { content: ""; width: 30px; height: 2px; background: linear-gradient(90deg, var(--froid), var(--canicule)); flex: none; }
+  h1 { font-size: clamp(34px, 6.2vw, 74px); line-height: 1.02; letter-spacing: -.03em; margin: 0; font-weight: 800; text-wrap: balance; max-width: 20ch; }
+  h2 { font-size: clamp(23px, 3.6vw, 40px); line-height: 1.06; letter-spacing: -.02em; margin: 0 0 18px; font-weight: 800; text-wrap: balance; max-width: 24ch; }
+  .sub { color: var(--ink-soft); font-size: clamp(15px, 2vw, 20px); max-width: 62ch; margin: 20px 0 0; line-height: 1.5; }
+  p.lead { color: var(--ink-soft); font-size: clamp(14px, 1.75vw, 17.5px); max-width: 64ch; margin: 0 0 16px; line-height: 1.55; }
+  b.hl { color: var(--ink); }
+  code.i { font-family: var(--font-mono); font-size: .88em; color: var(--domaine); }
+  code.i2 { font-family: var(--font-mono); font-size: .88em; color: var(--tiede); }
+
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(18px, 3vw, 42px); align-items: center; }
+  .cols.top { align-items: start; }
+  .cols.wide-left { grid-template-columns: 1.15fr 1fr; }
+  .cols.wide-right { grid-template-columns: 1fr 1.3fr; }
+  @media (max-width: 900px) {
+    .cols, .cols.wide-left, .cols.wide-right { grid-template-columns: 1fr; gap: 18px; }
+    h1 { font-size: 38px; } .slide { padding: 26px 22px 70px; justify-content: flex-start; }
+  }
+
+  ul.pts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+  ul.pts li { position: relative; padding-left: 27px; font-size: clamp(14px, 1.8vw, 17.5px); color: var(--ink); line-height: 1.45; }
+  ul.pts li::before { content: ""; position: absolute; left: 0; top: .48em; width: 11px; height: 11px; border-radius: 3px; background: var(--accent, var(--application)); }
+  ul.pts li b { font-weight: 700; }
+  ul.pts li span.g { color: var(--ink-soft); }
+  ul.pts li code { font-family: var(--font-mono); font-size: .87em; color: var(--domaine); }
+
+  ol.steps { list-style: none; counter-reset: s; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+  ol.steps li { counter-increment: s; position: relative; padding-left: 40px; font-size: clamp(14px, 1.8vw, 17.5px); line-height: 1.45; }
+  ol.steps li::before { content: counter(s); position: absolute; left: 0; top: -1px; width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; background: color-mix(in srgb, var(--accent, var(--application)) 16%, transparent); border: 1px solid color-mix(in srgb, var(--accent, var(--application)) 55%, transparent); color: var(--accent, var(--application)); font-family: var(--font-mono); font-size: 12.5px; font-weight: 700; }
+  ol.steps li code { font-family: var(--font-mono); font-size: .87em; color: var(--domaine); }
+
+  .card { background: var(--bg-2); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); padding: 19px 21px; }
+  .chip { display: inline-flex; align-items: center; gap: 7px; font-family: var(--font-mono); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-soft); background: color-mix(in srgb, var(--bg) 55%, transparent); border: 1px solid var(--line); border-radius: 999px; padding: 5px 11px; }
+  .chip i { width: 9px; height: 9px; border-radius: 50%; background: var(--c, var(--application)); font-style: normal; flex: none; }
+
+  .defbox { border-left: 3px solid var(--c, var(--domaine)); background: color-mix(in srgb, var(--c, var(--domaine)) 8%, var(--bg-2)); border-radius: 0 12px 12px 0; padding: 14px 17px; margin: 0 0 16px; }
+  .defbox .term-en { font-family: var(--font-mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--c, var(--domaine)); font-weight: 600; display: block; margin-bottom: 6px; }
+  .defbox p { margin: 0; font-size: clamp(14px, 1.75vw, 17.5px); line-height: 1.5; color: var(--ink); }
+  .defbox p + p { margin-top: 8px; color: var(--ink-soft); }
+  .defbox code { font-family: var(--font-mono); font-size: .87em; }
+
+  pre { margin: 0; background: var(--code-bg); border: 1px solid color-mix(in srgb, var(--code-bg) 60%, #4f83c0); border-radius: 14px; padding: 15px 17px; overflow: auto; box-shadow: var(--shadow); }
+  code { font-family: var(--font-mono); font-size: clamp(10.5px, 1.2vw, 13.4px); line-height: 1.58; color: var(--code-ink); white-space: pre; }
+  .k { color: var(--code-kw); } .s { color: var(--code-str); } .c { color: var(--code-com); font-style: italic; } .a { color: var(--code-ann); } .t { color: var(--code-type); }
+  .filetag { font-family: var(--font-mono); font-size: 11px; color: var(--ink-faint); letter-spacing: .06em; margin: 0 0 7px; text-transform: uppercase; word-break: break-all; }
+
+  .vs { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .vs { grid-template-columns: 1fr; } }
+  .vs > div { min-width: 0; }
+  .vslabel { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11.5px; letter-spacing: .09em; text-transform: uppercase; margin: 0 0 8px; font-weight: 600; }
+  .vslabel.ko { color: var(--canicule); }
+  .vslabel.ok { color: var(--domaine); }
+  .vslabel.c1 { color: var(--froid); }
+  .vslabel.c2 { color: var(--tiede); }
+  pre.ko { border-color: color-mix(in srgb, var(--canicule) 45%, var(--code-bg)); }
+  pre.ok { border-color: color-mix(in srgb, var(--domaine) 45%, var(--code-bg)); }
+  pre.c1 { border-color: color-mix(in srgb, var(--froid) 50%, var(--code-bg)); }
+  pre.c2 { border-color: color-mix(in srgb, var(--tiede) 50%, var(--code-bg)); }
+
+  table { border-collapse: collapse; width: 100%; font-size: clamp(12px, 1.5vw, 15.5px); }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-family: var(--font-mono); font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-faint); font-weight: 600; }
+  td.term { font-family: var(--font-mono); color: var(--domaine); font-weight: 600; white-space: nowrap; }
+  td.term2 { font-family: var(--font-mono); color: var(--tiede); font-weight: 600; white-space: nowrap; }
+  td.lbl { color: var(--ink-faint); font-family: var(--font-mono); font-size: .92em; }
+  td .muted { color: var(--ink-soft); }
+  tbody tr:last-child td { border-bottom: none; }
+
+  .big-quote { font-size: clamp(22px, 3.4vw, 38px); font-weight: 800; letter-spacing: -.02em; line-height: 1.14; max-width: 20ch; text-wrap: balance; }
+  .big-quote em { font-style: normal; background: linear-gradient(120deg, var(--froid), var(--chaud)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+  .mini { width: 100%; max-width: 420px; margin: 0 auto; display: block; }
+  .graph { width: 100%; max-width: 1120px; margin: 4px auto 0; display: block; }
+
+  .bricks { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 13px; }
+  .brick { background: var(--bg-2); border: 1px solid var(--line); border-top: 3px solid var(--c, var(--domaine)); border-radius: 12px; padding: 14px 15px; }
+  .brick h3 { margin: 0 0 5px; font-size: 15px; letter-spacing: -.01em; }
+  .brick p { margin: 0; font-size: 13px; line-height: 1.42; color: var(--ink-soft); }
+  .brick .ex { display: block; margin-top: 8px; font-family: var(--font-mono); font-size: 11px; color: var(--c, var(--domaine)); }
+
+  .fl { background: color-mix(in srgb, var(--c) 14%, transparent); border: 1px solid color-mix(in srgb, var(--c) 55%, transparent); color: var(--ink); border-radius: 8px; padding: 7px 11px; white-space: nowrap; }
+  .ar { color: var(--ink-faint); }
+
+  .hud { position: fixed; left: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: 16px; padding: 14px clamp(20px, 5vw, 44px); z-index: 20; pointer-events: none; background: linear-gradient(to top, var(--bg) 55%, transparent); }
+  .progress { flex: 1; height: 5px; border-radius: 4px; background: color-mix(in srgb, var(--ink-faint) 30%, transparent); overflow: hidden; }
+  .progress > i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--froid), var(--domaine), var(--tiede), var(--chaud), var(--canicule)); transition: width .4s ease; }
+  .counter { font-family: var(--font-mono); font-size: 12.5px; letter-spacing: .1em; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+  .nav { position: fixed; bottom: 26px; right: clamp(20px, 5vw, 44px); display: flex; gap: 8px; z-index: 21; }
+  .nav button { pointer-events: auto; width: 42px; height: 42px; border-radius: 11px; border: 1px solid var(--line-strong); background: var(--bg-2); color: var(--ink); font-size: 17px; cursor: pointer; box-shadow: var(--shadow); transition: transform .12s, border-color .12s; }
+  .nav button:hover { transform: translateY(-1px); border-color: var(--application); }
+  .nav button:focus-visible { outline: 2px solid var(--application); outline-offset: 2px; }
+  .topbar { position: fixed; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; gap: 12px; padding: 15px clamp(20px, 5vw, 44px); font-family: var(--font-mono); font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-faint); z-index: 20; pointer-events: none; }
+  @media (max-width: 700px) { .topbar span + span { display: none; } }
+  /* badge de discipline : cette slide parle-t-elle de DDD, d'hexagone, ou des deux ? */
+  .disc { font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: .12em;
+          padding: 3px 8px; border-radius: 999px; border: 1px solid; white-space: nowrap; }
+  .disc.ddd { color: var(--domaine); border-color: color-mix(in srgb, var(--domaine) 50%, transparent);
+              background: color-mix(in srgb, var(--domaine) 12%, transparent); }
+  .disc.hex { color: var(--application); border-color: color-mix(in srgb, var(--application) 50%, transparent);
+              background: color-mix(in srgb, var(--application) 12%, transparent); }
+  .num .disc:first-of-type { margin-left: 6px; }
+
+  .kbd { font-family: var(--font-mono); font-size: 11px; color: var(--ink-faint); }
+  .kbd b { color: var(--ink-soft); border: 1px solid var(--line-strong); border-radius: 5px; padding: 1px 6px; font-weight: 500; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span>Architecture hexagonale &amp; DDD</span>
+  <span>Domaine : canicule &middot; Spring Boot</span>
+</div>
+
+<div class="deck" id="deck">
+
+  <!-- 01 -->
+  <section class="slide">
+    <p class="num">Cours &middot; 01</p>
+    <h1>Architecture hexagonale &amp; DDD</h1>
+    <p class="sub">Construire un logiciel dont le coeur metier ne depend d'aucune technologie. Fil rouge : la surveillance de la temperature et la detection des <b>canicules</b>.</p>
+    <p class="sub" style="font-size:16px; margin-top:12px">Chaque notion est definie, puis immediatement montree dans le code reel du projet <code class="i">fr.meteo</code>. Aucun exemple n'est invente : les chemins de fichiers sont ceux du depot.</p>
+    <div style="margin-top:28px; display:flex; gap:10px; flex-wrap:wrap;">
+      <span class="chip"><i style="--c:var(--domaine)"></i>domaine pur</span>
+      <span class="chip"><i style="--c:var(--application)"></i>ports &amp; adaptateurs</span>
+      <span class="chip"><i style="--c:var(--chaud)"></i>Spring en peripherie</span>
+      <span class="chip"><i style="--c:var(--froid)"></i>30 tests, dont 7 d'architecture</span>
+    </div>
+    <p class="sub" style="font-size:15px; margin-top:24px">Chaque slide porte un badge : <span class="disc ddd">DDD</span> quand elle parle de <b>ce qu'on met</b> dans le coeur metier, <span class="disc hex">HEXAGONE</span> quand elle parle de <b>comment on l'isole</b> de la technique. Certaines portent les deux.</p>
+  </section>
+
+  <!-- 02 -->
+  <section class="slide">
+    <p class="num">Le probleme &middot; 02<span class="disc ddd">DDD</span><span class="disc hex">HEXAGONE</span></p>
+    <div class="cols">
+      <div>
+        <h2>Quand la technique noie le metier</h2>
+        <ul class="pts" style="--accent:var(--chaud)">
+          <li>La regle "canicule = 3 jours &gt; 35&deg;C" est <b>diluee</b> dans des requetes SQL et des controleurs.</li>
+          <li>Changer de base ou d'API oblige a <b>rouvrir le coeur metier</b>.</li>
+          <li>Tester une regle exige de <b>demarrer tout le framework</b>.</li>
+          <li>Six mois plus tard, <b>personne ne sait plus</b> ou vit la definition d'une canicule.</li>
+        </ul>
+        <p class="sub">L'architecture hexagonale inverse la dependance : la technique s'adapte au metier, jamais l'inverse. Le DDD, lui, dit <b>comment ecrire ce metier</b>.</p>
+      </div>
+      <div class="card">
+        <p class="big-quote">Le metier au <em>centre</em>. La technique <em>branchee</em> autour.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 03 -->
+  <section class="slide">
+    <p class="num">Fondations &middot; 03<span class="disc ddd">DDD</span></p>
+    <h2>Le DDD, c'est quoi exactement ?</h2>
+    <div class="cols top">
+      <div>
+        <div class="defbox" style="--c:var(--domaine)">
+          <span class="term-en">Domain-Driven Design</span>
+          <p>Une facon de concevoir un logiciel dans laquelle <b>le modele du metier est le coeur du systeme</b>, et non un detail range entre la base de donnees et l'ecran.</p>
+          <p>Terme popularise par Eric Evans en 2003. "Domaine" = le sujet dont parle le logiciel. Ici : la meteorologie et les vagues de chaleur.</p>
+        </div>
+        <p class="lead">Le pari du DDD : dans une application non triviale, la difficulte n'est <b class="hl">pas</b> technique. Elle est de comprendre le metier, puis de garder cette comprehension lisible dans le code pendant des annees.</p>
+      </div>
+      <div>
+        <div class="card">
+          <p class="filetag" style="margin-bottom:12px">Ce que le DDD n'est pas</p>
+          <ul class="pts" style="--accent:var(--canicule)">
+            <li><b>Ni une bibliotheque, ni un framework.</b> <span class="g">Le paquet <code>fr.meteo.surveillance.domaine</code> n'a aucune dependance : ni Spring, ni JPA, ni Jackson.</span></li>
+            <li><b>Ni une arborescence de dossiers.</b> <span class="g">Nommer un paquet <code>domaine</code> ne suffit pas : c'est <code>ArchitectureHexagonaleTest</code> qui le prouve, a chaque build.</span></li>
+            <li><b>Ni reserve aux gros projets.</b> <span class="g">Mais inutile sur un CRUD sans regles.</span></li>
+            <li><b>Ni l'architecture hexagonale.</b> <span class="g">Les deux se marient bien, mais repondent a des questions differentes.</span></li>
+          </ul>
+        </div>
+        <p class="lead" style="margin:14px 0 0">DDD : <b class="hl">quoi</b> mettre dans le coeur.<br>Hexagone : <b class="hl">comment</b> l'isoler du reste.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 04 -->
+  <section class="slide">
+    <p class="num">Fondations &middot; 04<span class="disc ddd">DDD</span></p>
+    <h2>Les deux moities du DDD</h2>
+    <p class="lead">On confond souvent le DDD avec sa boite a outils. Elle n'en est que la seconde moitie, et la moins importante.</p>
+    <div class="cols" style="align-items:stretch">
+      <div class="card" style="border-top:3px solid var(--froid)">
+        <span class="chip" style="margin-bottom:12px"><i style="--c:var(--froid)"></i>Strategique &middot; le decoupage</span>
+        <p class="lead" style="margin:0 0 12px">Ou passent les frontieres ? Quel vocabulaire vaut dans quelle zone ?</p>
+        <ul class="pts" style="--accent:var(--froid)">
+          <li><b>Contexte delimite</b> <span class="g">: une zone ou chaque mot a un sens unique.</span></li>
+          <li><b>Sous-domaine central</b> <span class="g">: la partie qui fait la valeur du produit. Ici, la detection des canicules.</span></li>
+        </ul>
+        <p class="lead" style="margin:12px 0 0; font-size:14px">Les slides 08 a 15 montrent une frontiere de contexte <b class="hl">reelle</b>, dans ce depot &mdash; jusqu'a l'arborescence et au JSON renvoye.</p>
+      </div>
+      <div class="card" style="border-top:3px solid var(--domaine)">
+        <span class="chip" style="margin-bottom:12px"><i style="--c:var(--domaine)"></i>Tactique &middot; les briques</span>
+        <p class="lead" style="margin:0 0 12px">Une fois la frontiere posee, avec quels objets ecrit-on le modele ?</p>
+        <ul class="pts" style="--accent:var(--domaine)">
+          <li><b>Objet-valeur</b>, <b>entite</b>, <b>agregat</b></li>
+          <li><b>Service de domaine</b>, <b>fabrique</b>, <b>depot</b></li>
+        </ul>
+        <p class="lead" style="margin:12px 0 0; font-size:14px">La premiere brique, l'objet-valeur, arrive des la slide 05 : tout le reste s'en sert.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 05 -->
+  <section class="slide">
+    <p class="num">Brique tactique &middot; 05<span class="disc ddd">DDD</span></p>
+    <div class="cols">
+      <div>
+        <h2>Objet-valeur : la theorie</h2>
+        <div class="defbox" style="--c:var(--domaine)">
+          <span class="term-en">Value object</span>
+          <p>Un objet qu'on identifie <b>par ce qu'il vaut</b>, pas par qui il est. Deux exemplaires de meme valeur sont interchangeables.</p>
+        </div>
+        <ul class="pts" style="--accent:var(--domaine)">
+          <li><b>Immuable</b> <span class="g">: aucun setter. Toute "modification" renvoie une nouvelle instance. Donc partageable sans risque.</span></li>
+          <li><b>Sans identite</b> <span class="g">: on redefinit <code>equals</code> sur la valeur. 25&deg;C est egal a 77&deg;F : c'est la meme chaleur.</span></li>
+          <li><b>Auto-validant</b> <span class="g">: le constructeur refuse l'absurde. Une temperature sous le zero absolu n'existe pas.</span></li>
+          <li><b>Porteur de comportement</b> <span class="g">: convertir et comparer sont des regles metier ; elles vivent ici, pas dans un <code>TemperatureUtils</code>.</span></li>
+        </ul>
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:14px">
+          <p class="filetag" style="margin-bottom:8px">Analogie</p>
+          <p style="margin:0; font-size:15.5px; line-height:1.5; color:var(--ink-soft)">Un billet de 10 &euro; est un <b class="hl">objet-valeur</b> : si l'on echange le votre contre le mien, rien n'a change. Votre <b class="hl">compte en banque</b>, lui, a une identite : on ne l'echange pas contre un autre de meme solde.</p>
+        </div>
+        <p class="filetag">fr/meteo/surveillance/domaine/modele/Temperature.java</p>
+        <pre><code data-lang="java">public final class Temperature {
+
+  private static final double ZERO_ABSOLU_CELSIUS = -273.15;
+
+  private final double valeur;          // champs finaux
+  private final UniteTemperature unite;
+
+  private Temperature(double valeur, UniteTemperature unite) {
+    // auto-validation : l'objet ne peut pas naitre invalide
+    if (convertirEnCelsius(valeur, unite) &lt; ZERO_ABSOLU_CELSIUS) {
+      throw new IllegalArgumentException(
+          "Temperature impossible : sous le zero absolu");
+    }
+    this.valeur = valeur;
+    this.unite = unite;
+  }
+}</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 06 -->
+  <section class="slide">
+    <p class="num">Brique tactique &middot; 06<span class="disc ddd">DDD</span></p>
+    <div class="cols wide-right">
+      <div>
+        <h2>Objet-valeur : le code</h2>
+        <p class="lead">Trois details qui font la difference entre une classe et un vrai objet-valeur.</p>
+        <ol class="steps" style="--accent:var(--domaine)">
+          <li><b>Fabriques nommees</b> plutot qu'un constructeur public : <code>Temperature.celsius(35)</code> dit son unite. Impossible de creer une temperature "sans unite".</li>
+          <li><b>Une methode = une regle metier.</b> <code>atteintOuDepasse</code> n'est pas un utilitaire : c'est la phrase que prononce le meteorologue.</li>
+          <li><b>equals sur la valeur reelle</b>, en Celsius, avec une tolerance qui absorbe les arrondis de conversion.</li>
+        </ol>
+        <p class="lead" style="margin-top:14px; font-size:14px">Verifie par <code class="i">TemperatureTest</code> : <code class="i">Temperature.celsius(25)</code> est <code class="i">equals</code> a <code class="i">Temperature.fahrenheit(77)</code>.</p>
+      </div>
+      <div>
+        <p class="filetag">fr/meteo/surveillance/domaine/modele/Temperature.java (suite)</p>
+        <pre><code data-lang="java">// 1. fabriques : le nom porte l'unite
+public static Temperature celsius(double v) {
+  return new Temperature(v, UniteTemperature.CELSIUS);
+}
+public static Temperature fahrenheit(double v) {
+  return new Temperature(v, UniteTemperature.FAHRENHEIT);
+}
+
+// 2. du comportement metier, pas un helper technique
+public boolean atteintOuDepasse(Temperature seuil) {
+  return this.valeurEnCelsius() &gt;= seuil.valeurEnCelsius();
+}
+public boolean estPlusChaudeQue(Temperature autre) {
+  return this.valeurEnCelsius() &gt; autre.valeurEnCelsius();
+}
+
+// 3. egalite par valeur : 25 C et 77 F sont le meme objet
+@Override
+public boolean equals(Object o) {
+  if (!(o instanceof Temperature autre)) return false;
+  return Math.abs(this.valeurEnCelsius()
+                - autre.valeurEnCelsius()) &lt; 1e-4;
+}</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 07 -->
+  <section class="slide">
+    <p class="num">Brique tactique &middot; 07<span class="disc ddd">DDD</span></p>
+    <div class="cols wide-left">
+      <div>
+        <h2>Le record, objet-valeur pret a l'emploi</h2>
+        <div class="defbox" style="--c:var(--domaine)">
+          <span class="term-en">record &middot; Java 16+</span>
+          <p>Un type dont le compilateur genere le constructeur, les accesseurs, <code>equals</code>, <code>hashCode</code> et <code>toString</code> a partir de la seule liste des champs. Ses champs sont finaux : il est <b>immuable par construction</b>.</p>
+        </div>
+        <p class="lead">Le record offre gratuitement trois des quatre proprietes de la slide precedente : immuabilite, egalite par valeur, <code class="i">hashCode</code> coherent. Il ne reste qu'a ecrire la quatrieme, la validation.</p>
+        <ul class="pts" style="--accent:var(--domaine)">
+          <li><b>Le constructeur compact</b> <span class="g">&mdash; <code>public Localisation {</code>, sans parametres ni parentheses. Il s'execute avant l'affectation des champs : c'est la qu'on refuse l'absurde.</span></li>
+          <li><b>Emballer une valeur unique</b> <span class="g">&mdash; <code>StationId</code> n'ajoute aucun champ a un <code>UUID</code>. Il ajoute du sens, et de la securite de type. On verra slide 20 ce que cela evite.</span></li>
+        </ul>
+        <p class="lead" style="margin-top:14px; font-size:14px">Consequence : une <code class="i">Localisation</code> qui existe a forcement une ville. Plus jamais de verification defensive ailleurs dans le code.</p>
+      </div>
+      <div>
+        <p class="filetag">fr/meteo/surveillance/domaine/modele/Localisation.java</p>
+        <pre><code data-lang="java">public record Localisation(String ville, String codePostal) {
+
+  // constructeur compact : la validation, et rien d'autre
+  public Localisation {
+    if (ville == null || ville.isBlank()) {
+      throw new IllegalArgumentException("La ville est obligatoire");
+    }
+    if (codePostal == null || codePostal.isBlank()) {
+      throw new IllegalArgumentException("Le code postal est obligatoire");
+    }
+  }
+}
+
+// egalite par valeur, generee : rien a ecrire
+new Localisation("Lyon", "69000")
+    .equals(new Localisation("Lyon", "69000"));   // true</code></pre>
+        <p class="filetag" style="margin-top:12px">fr/meteo/surveillance/domaine/modele/StationId.java</p>
+        <pre><code data-lang="java">public record StationId(UUID valeur) {
+
+  public StationId {
+    Objects.requireNonNull(valeur, "L'identifiant est obligatoire");
+  }
+
+  public static StationId nouveau() {
+    return new StationId(UUID.randomUUID());
+  }
+}</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 08 -->
+  <section class="slide">
+    <p class="num">Strategique &middot; 08<span class="disc ddd">DDD</span></p>
+    <div class="cols wide-left">
+      <div>
+        <h2>Contexte delimite : la question a poser</h2>
+        <div class="defbox" style="--c:var(--froid)">
+          <span class="term-en">Bounded context</span>
+          <p>Une zone du logiciel a l'interieur de laquelle <b>chaque mot du metier a un sens unique</b>. Le mot change de sens quand on franchit la frontiere.</p>
+        </div>
+        <p class="lead">Le test concret n'est pas "combien de microservices ?" mais : <b class="hl">le meme mot designe-t-il deux modeles differents selon a qui je parle ?</b></p>
+        <p class="lead">Posons la question sur ce projet. Le mot est <b class="hl">"station"</b>.</p>
+        <ul class="pts" style="--accent:var(--froid)">
+          <li>Pour le <b>previsionniste</b> <span class="g">: une station est une source de releves de temperature. Il veut savoir s'il y a canicule.</span></li>
+          <li>Pour le <b>technicien de maintenance</b> <span class="g">: une station est un boitier avec un numero de serie, qu'il faut etalonner chaque annee. La temperature ne l'interesse pas.</span></li>
+        </ul>
+      </div>
+      <div>
+        <div class="card">
+          <p class="filetag" style="margin-bottom:12px">Deux contextes, deux paquets racine</p>
+          <table>
+            <thead><tr><th></th><th style="color:var(--froid)">Surveillance</th><th style="color:var(--tiede)">Maintenance</th></tr></thead>
+            <tbody>
+              <tr><td class="lbl">paquet</td><td><span class="muted"><code style="font-family:var(--font-mono);font-size:.9em">fr.meteo.surveillance</code></span></td><td><span class="muted"><code style="font-family:var(--font-mono);font-size:.9em">fr.meteo.maintenance</code></span></td></tr>
+              <tr><td class="lbl">"station"</td><td class="term">StationMeteo</td><td class="term2">Station</td></tr>
+              <tr><td class="lbl">c'est...</td><td><span class="muted">une source de releves</span></td><td><span class="muted">un equipement a etalonner</span></td></tr>
+              <tr><td class="lbl">invariant</td><td><span class="muted">un releve par jour</span></td><td><span class="muted">pas de service sans etalonnage valide</span></td></tr>
+              <tr><td class="lbl">connait Temperature ?</td><td><span class="muted">oui, c'est son sujet</span></td><td><span class="muted">non, jamais</span></td></tr>
+              <tr><td class="lbl">connait NumeroSerie ?</td><td><span class="muted">non, jamais</span></td><td><span class="muted">oui</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="lead" style="margin:14px 0 0; font-size:14px">Chaque cote possede du vocabulaire que l'autre <b class="hl">n'a aucune raison</b> de connaitre. C'est le signe d'une frontiere bien placee.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 09 -->
+  <section class="slide">
+    <p class="num">Strategique &middot; 09<span class="disc ddd">DDD</span></p>
+    <h2>Le meme mot, deux modeles</h2>
+    <p class="lead">Voici les deux classes, cote a cote. Elles decrivent le <b class="hl">meme objet du monde reel</b> : le boitier installe a Lyon. Elles ne partagent pas une ligne.</p>
+    <div class="vs">
+      <div>
+        <p class="vslabel c1">&#9673; contexte surveillance</p>
+        <p class="filetag">fr/meteo/surveillance/domaine/modele/StationMeteo.java</p>
+        <pre class="c1"><code data-lang="java">public class StationMeteo {
+
+  private final StationId id;
+  private final Localisation localisation;
+  private final List&lt;ReleveTemperature&gt; releves;
+
+  // l'invariant : un seul releve par jour
+  public void enregistrer(ReleveTemperature releve) {
+    boolean jourDejaConnu = releves.stream()
+        .anyMatch(r -&gt; r.jour().equals(releve.jour()));
+    if (jourDejaConnu) {
+      throw new ReleveDejaPresentException(id, releve.jour());
+    }
+    releves.add(releve);
+  }
+}</code></pre>
+      </div>
+      <div>
+        <p class="vslabel c2">&#9673; contexte maintenance</p>
+        <p class="filetag">fr/meteo/maintenance/domaine/modele/Station.java</p>
+        <pre class="c2"><code data-lang="java">public class Station {
+
+  public static final int VALIDITE_ETALONNAGE_JOURS = 365;
+
+  private final StationId id;
+  private final NumeroSerie numeroSerie;
+  private EtatOperationnel etat;
+  private LocalDate dernierEtalonnage;
+
+  // un autre invariant, sur le meme objet reel
+  public void mettreEnService(LocalDate aujourdHui) {
+    if (etalonnagePerime(aujourdHui)) {
+      throw new EtalonnagePerimeException(id, dernierEtalonnage);
+    }
+    this.etat = EtatOperationnel.EN_SERVICE;
+  }
+}</code></pre>
+      </div>
+    </div>
+    <p class="sub" style="margin-top:16px">Aucune classe n'est "la vraie station". Chercher a les fusionner produirait une classe qui parle a la fois de canicules et de banc de calibration : le fourre-tout que le DDD cherche precisement a eviter.</p>
+  </section>
+
+  <!-- 10 -->
+  <section class="slide">
+    <p class="num">Strategique &middot; 10<span class="disc ddd">DDD</span></p>
+    <div class="cols wide-right">
+      <div>
+        <h2>Chacun son identifiant</h2>
+        <p class="lead">Le point le plus contre-intuitif du decoupage. Il existe <b class="hl">deux</b> classes <code class="i">StationId</code> dans ce depot, presque identiques.</p>
+        <p class="lead">Ce n'est pas un oubli de factorisation. Si la maintenance importait le <code class="i">StationId</code> de la surveillance, les deux modeles seraient <b class="hl">soudes</b> : changer le type de l'identifiant d'un cote casserait l'autre.</p>
+        <div class="defbox" style="--c:var(--tiede)">
+          <span class="term-en">La regle</span>
+          <p>On factorise <b>a l'interieur</b> d'un contexte. Jamais <b>entre</b> deux contextes.</p>
+          <p>Les contextes ne partagent que la <b>valeur brute</b> — ici un <code>UUID</code> — qui sert d'identifiant de correlation.</p>
+        </div>
+      </div>
+      <div>
+        <div class="vs" style="grid-template-columns:1fr; gap:12px">
+          <div>
+            <p class="filetag">fr/meteo/surveillance/domaine/modele/StationId.java</p>
+            <pre class="c1"><code data-lang="java">package fr.meteo.surveillance.domaine.modele;
+
+public record StationId(UUID valeur) { ... }</code></pre>
+          </div>
+          <div>
+            <p class="filetag">fr/meteo/maintenance/domaine/modele/StationId.java</p>
+            <pre class="c2"><code data-lang="java">package fr.meteo.maintenance.domaine.modele;
+
+// Duplication DELIBEREE, pas un manque de factorisation.
+public record StationId(UUID valeur) { ... }</code></pre>
+          </div>
+          <div>
+            <p class="filetag">La frontiere est verifiee a chaque build, dans les deux sens</p>
+            <pre class="ok"><code data-lang="java">@Test
+void le_contexte_maintenance_ignore_le_contexte_surveillance() {
+  noClasses().that().resideInAPackage("fr.meteo.maintenance..")
+    .should().dependOnClassesThat()
+             .resideInAPackage("fr.meteo.surveillance..")
+    .check(classes);
+}
+
+@Test
+void le_contexte_surveillance_ignore_le_contexte_maintenance() {
+  noClasses().that().resideInAPackage("fr.meteo.surveillance..")
+    .should().dependOnClassesThat()
+             .resideInAPackage("fr.meteo.maintenance..")
+    .check(classes);
+}</code></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 11 -->
+  <section class="slide">
+    <p class="num">Strategique &middot; 11<span class="disc ddd">DDD</span></p>
+    <div class="cols wide-right">
+      <div>
+        <h2>L'arborescence est une affirmation</h2>
+        <p class="lead">Un paquet <code class="i">domaine</code> pose a la racine affirme qu'il existe <b class="hl">une seule</b> lecture legitime du metier. Tout le reste devient, implicitement, un module secondaire.</p>
+        <p class="lead">Si deux contextes sont freres dans le metier, ils doivent etre freres dans l'arborescence. Sinon le code contredit le cours.</p>
+        <ul class="pts" style="--accent:var(--froid)">
+          <li><b>Les contextes sont des paquets de premier niveau</b> <span class="g">: <code>surveillance</code> et <code>maintenance</code>, cote a cote.</span></li>
+          <li><b>Au-dessus d'eux, uniquement ce qui n'appartient a aucun</b> <span class="g">: le demarrage Spring Boot, la racine de composition, les tests d'architecture.</span></li>
+          <li><b>Chaque contexte a la meme forme interne.</b> <span class="g">La maintenance a son hexagone complet, jusqu'a sa table et son controleur. Simplement plus <i>petit</i> : aucune regle n'y echappe encore a l'agregat, donc pas de <code>service/</code>.</span></li>
+        </ul>
+        <p class="lead" style="margin-top:14px; font-size:14px">Le test : <b class="hl">peut-on nommer le contexte d'une classe rien qu'en lisant son chemin ?</b> Si non, l'arborescence ment.</p>
+      </div>
+      <div>
+        <p class="filetag">src/main/java/</p>
+        <pre><code>fr/meteo/
+├── ApplicationCanicule.java   <span class="c">// demarrage, hors contexte</span>
+├── config/                    <span class="c">// RACINE DE COMPOSITION</span>
+│   ├── ConfigurationSurveillance.java
+│   ├── ConfigurationMaintenance.java
+│   └── JeuDeDonneesDemo.java
+│
+├── <span class="t">surveillance/</span>              <span class="c">// &#8592; CONTEXTE</span>
+│   ├── domaine/
+│   │   ├── modele/           <span class="c">// StationMeteo, Temperature</span>
+│   │   ├── port/             <span class="c">// entrant/ + sortant/</span>
+│   │   └── service/          <span class="c">// DetecteurCanicule</span>
+│   ├── application/          <span class="c">// ServiceDetectionCanicule</span>
+│   └── adaptateur/           <span class="c">// web, persistance, alerte</span>
+│
+└── <span class="t">maintenance/</span>               <span class="c">// &#8592; CONTEXTE, meme forme</span>
+    ├── domaine/
+    │   ├── modele/           <span class="c">// Station, NumeroSerie</span>
+    │   └── port/             <span class="c">// entrant/ + sortant/</span>
+    ├── application/          <span class="c">// ServiceMaintenance</span>
+    └── adaptateur/           <span class="c">// web, persistance</span></code></pre>
+        <p class="lead" style="margin:14px 0 0; font-size:13.5px">Aucun des deux contextes n'est "le vrai" domaine. C'est exactement ce que dit la slide 09 &mdash; l'arborescence doit le dire aussi.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 12 -->
+  <section class="slide">
+    <p class="num">Strategique &middot; 12<span class="disc ddd">DDD</span><span class="disc hex">HEXAGONE</span></p>
+    <h2>Piege : une couche n'est pas un contexte</h2>
+    <p class="lead">Le depot contient <b class="hl">quatre</b> classes qui parlent de stations. Trois d'entre elles ne forment qu'<b class="hl">un seul</b> contexte. Savoir les distinguer evite de crier "bounded context" a chaque DTO.</p>
+    <div class="cols top">
+      <div>
+        <div class="card" style="border-top:3px solid var(--froid)">
+          <p class="filetag" style="margin-bottom:10px">Un modele, trois representations</p>
+          <table>
+            <tbody>
+              <tr><td class="term">StationMeteo</td><td><span class="muted">le modele, dans le domaine</span></td></tr>
+              <tr><td class="term">StationMeteoJpa</td><td><span class="muted">sa forme en base</span></td></tr>
+              <tr><td class="term">StationReponse</td><td><span class="muted">sa forme en JSON</span></td></tr>
+            </tbody>
+          </table>
+          <p class="lead" style="margin:12px 0 0; font-size:14px"><code class="i">StationMeteoMapper</code> traduit entre les deux premieres <b class="hl">sans rien perdre ni rien inventer</b>. Meme contexte.</p>
+        </div>
+      </div>
+      <div>
+        <div class="card" style="border-top:3px solid var(--tiede)">
+          <p class="filetag" style="margin-bottom:10px">Un autre modele</p>
+          <table>
+            <tbody>
+              <tr><td class="term2">Station</td><td><span class="muted">le modele du contexte maintenance</span></td></tr>
+            </tbody>
+          </table>
+          <p class="lead" style="margin:12px 0 0; font-size:14px">Aucun mapper ne peut la produire depuis <code class="i">StationMeteo</code> : il faudrait <b class="hl">jeter</b> les releves et <b class="hl">inventer</b> un numero de serie et une date d'etalonnage.</p>
+        </div>
+      </div>
+    </div>
+    <div class="defbox" style="--c:var(--application); margin-top:20px">
+      <span class="term-en">Le test de la traduction</span>
+      <p>Puis-je traduire d'un type vers l'autre sans rien perdre ni rien inventer ? <b>Oui</b> &rarr; ce sont deux representations d'un meme modele, donc un seul contexte. <b>Non</b> &rarr; ce sont deux modeles, donc deux contextes.</p>
+      <p>Les trois slides suivantes appliquent ce test au code : d'abord une traduction qui marche, ensuite une qui ne peut pas exister.</p>
+    </div>
+  </section>
+
+  <!-- 13 -->
+  <section class="slide">
+    <p class="num">Strategique &middot; 13<span class="disc hex">HEXAGONE</span></p>
+    <h2>Un modele, trois representations</h2>
+    <p class="lead">Suivons une station de surveillance a travers les couches de <b class="hl">son</b> hexagone. A chaque frontiere technique elle change de forme, jamais de sens : le mapper ne perd rien et n'invente rien. C'est ce qui prouve qu'on reste dans <b class="hl">un seul contexte</b>.</p>
+
+    <div class="card" style="overflow-x:auto; margin-bottom:20px">
+      <div style="display:flex; align-items:center; justify-content:center; gap:14px; flex-wrap:wrap; font-family:var(--font-mono); font-size:clamp(10.5px,1.35vw,13px); color:var(--ink-soft)">
+        <span class="fl" style="--c:var(--application)">StationReponse<br><span style="font-size:.85em; opacity:.75">JSON</span></span>
+        <span class="ar">&larr;</span>
+        <span class="fl" style="--c:var(--domaine)">StationMeteo<br><span style="font-size:.85em; opacity:.75">le modele</span></span>
+        <span class="ar">&#8646;</span>
+        <span class="fl" style="--c:var(--chaud)">StationMeteoJpa<br><span style="font-size:.85em; opacity:.75">table stations</span></span>
+      </div>
+    </div>
+
+    <div class="cols top">
+      <div>
+        <ol class="steps" style="--accent:var(--application)">
+          <li><b>Le modele</b> <span class="g">&mdash; <code>StationMeteo</code>, dans le domaine. Immuable, porteur de l'invariant.</span></li>
+          <li><b>La forme en base</b> <span class="g">&mdash; <code>StationMeteoJpa</code>. Mutable, constructeur vide : les exigences de l'ORM.</span></li>
+          <li><b>La forme en JSON</b> <span class="g">&mdash; <code>StationReponse</code>, aplatie pour le client HTTP.</span></li>
+        </ol>
+      </div>
+      <div>
+        <div class="defbox" style="--c:var(--domaine); margin:0">
+          <span class="term-en">Le critere</span>
+          <p>L'aller-retour <code>versJpa</code> puis <code>versDomaine</code> rend une station <b>equivalente</b> a celle du depart.</p>
+          <p>Rien ne s'evapore, rien n'apparait. Trois formes, un seul modele &mdash; donc un seul contexte.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 14 -->
+  <section class="slide">
+    <p class="num">Strategique &middot; 14<span class="disc hex">HEXAGONE</span></p>
+    <div class="cols wide-right">
+      <div>
+        <h2>La traduction, dans le code</h2>
+        <p class="lead">Le mapper vit dans <b class="hl">l'adaptateur</b>, jamais dans le domaine. C'est lui qui absorbe les exigences de l'ORM pour que l'agregat n'ait pas a les connaitre.</p>
+        <ul class="pts" style="--accent:var(--chaud)">
+          <li><b>Aller</b> <span class="g">&mdash; <code>versJpa</code> aplatit : <code>StationId</code> devient un <code>UUID</code>, <code>Localisation</code> devient deux colonnes.</span></li>
+          <li><b>Retour</b> <span class="g">&mdash; <code>versDomaine</code> passe par la fabrique <code>reconstituer</code>. Les invariants sont <b>revalides</b> au chargement.</span></li>
+          <li><b>Consequence</b> <span class="g">&mdash; une ligne corrompue en base ne peut pas ressusciter un agregat invalide. Elle leve une exception du domaine.</span></li>
+        </ul>
+        <p class="lead" style="margin-top:16px; font-size:14px">Le DTO, lui, ne fait que sortir : aucun <code class="i">versDomaine</code> ne remonte depuis un <code class="i">StationReponse</code>. Une entree HTTP passe par un objet de commande (slide 35).</p>
+      </div>
+      <div>
+        <p class="filetag">surveillance/adaptateur/sortant/persistance/StationMeteoMapper.java</p>
+        <pre><code data-lang="java">// DOMAINE -&gt; PERSISTANCE : on aplatit, on ne juge pas
+static StationMeteoJpa versJpa(StationMeteo station) {
+  return new StationMeteoJpa(
+      station.id().valeur(),              // StationId -&gt; UUID
+      station.localisation().ville(),     // Localisation
+      station.localisation().codePostal(),//  -&gt; 2 colonnes
+      relevesJpa);
+}
+
+// PERSISTANCE -&gt; DOMAINE : on reconstruit un agregat VALIDE
+static StationMeteo versDomaine(StationMeteoJpa jpa) {
+  return StationMeteo.reconstituer(
+      new StationId(jpa.getId()),
+      new Localisation(jpa.getVille(), jpa.getCodePostal()),
+      releves);
+}</code></pre>
+        <p class="filetag" style="margin-top:12px">Reponse reelle : POST /api/stations</p>
+        <pre class="ok"><code>{"id":"499347ba-c9d6-4906-b319-7479ee4fd858",
+ "ville":"Nice","codePostal":"06000"}</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 15 -->
+  <section class="slide">
+    <p class="num">Strategique &middot; 15<span class="disc ddd">DDD</span></p>
+    <h2>Ce qu'aucun mapper ne peut faire</h2>
+    <p class="lead">Le contexte maintenance a maintenant, lui aussi, son entite JPA et son DTO. Essayons d'ecrire le mapper qui transformerait une <code class="i">StationMeteo</code> en <code class="i2">StationJpa</code> de maintenance. Il faudrait <b class="hl">jeter</b> des donnees et en <b class="hl">inventer</b> d'autres. Ce n'est pas une traduction : c'est une autre lecture du monde.</p>
+    <div class="cols wide-right">
+      <div>
+        <div class="card" style="overflow-x:auto; margin-bottom:14px">
+          <table>
+            <thead><tr><th>table</th><th>colonnes</th></tr></thead>
+            <tbody>
+              <tr><td class="term">stations</td><td><span class="muted">id, ville, code_postal, releves[]</span></td></tr>
+              <tr><td class="term2">stations_maintenance</td><td><span class="muted">id, numero_serie, etat, dernier_etalonnage</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <ul class="pts" style="--accent:var(--canicule)">
+          <li><b>Une seule colonne commune</b> <span class="g">: <code>id</code>. Et encore : c'est la valeur brute de l'UUID, pas une cle etrangere entre modeles.</span></li>
+          <li><b>Aucune conversion possible</b> <span class="g">: d'ou viendrait le numero de serie ? Que deviendraient les releves ?</span></li>
+          <li><b>Deux tables, deux depots, deux mappers.</b> <span class="g">Rien n'est mutualise : c'est ce qui leur permet d'evoluer separement.</span></li>
+        </ul>
+        <p class="lead" style="margin-top:14px; font-size:14px">La frontiere va jusqu'au bord du systeme : deux URL, deux JSON, <b class="hl">zero champ commun</b> hors identifiant.</p>
+      </div>
+      <div>
+        <p class="filetag">Le mapper qui ne peut pas exister</p>
+        <pre class="ko"><code data-lang="java">// N'EXISTE PAS, ET NE DOIT PAS EXISTER
+static StationJpa versMaintenance(StationMeteo station) {
+  return new StationJpa(
+      station.id().valeur(),   // ok : la valeur brute passe
+      ???,                     // INVENTER un numero de serie
+      ???,                     // INVENTER un etat operationnel
+      ???);                    // INVENTER une date d'etalonnage
+  // et JETER station.releves() : la maintenance n'en veut pas
+}</code></pre>
+        <p class="filetag" style="margin-top:12px">Un seul boitier (40a295fc&hellip;), deux vues reelles</p>
+        <pre class="c1"><code>GET /api/canicules        <span class="c">// vue surveillance</span>
+[{ "stationId":"40a295fc-0212-4cbf-b9a7-072a7f725dc8",
+   "ville":"Lyon", "codePostal":"69000",
+   "nombreJours":4, "picCelsius":40.0 }]</code></pre>
+        <pre class="c2" style="margin-top:10px"><code>GET /api/maintenance/stations/40a295fc-&hellip;
+{ "id":"40a295fc-0212-4cbf-b9a7-072a7f725dc8",
+  "numeroSerie":"MF-004217",
+  "etat":"HORS_SERVICE",
+  "dernierEtalonnage":"2025-06-01",
+  "etalonnagePerime":true }</code></pre>
+        <p class="lead" style="margin:12px 0 0; font-size:13.5px">Meme identifiant. Pas un seul autre champ en commun. Le boitier est le meme ; le <b class="hl">modele</b> ne l'est pas.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 16 -->
+  <section class="slide">
+    <p class="num">Langage &middot; 16<span class="disc ddd">DDD</span></p>
+    <div class="cols wide-left">
+      <div>
+        <h2>Le langage omnipresent</h2>
+        <div class="defbox" style="--c:var(--application)">
+          <span class="term-en">Ubiquitous language</span>
+          <p>Un <b>seul</b> vocabulaire, partage par les experts metier et par le code, <b>a l'interieur d'un contexte</b>. Le mot dit par le meteorologue est le mot lu dans la classe Java.</p>
+        </div>
+        <p class="lead">"Omnipresent" parce qu'il vaut partout : dans la reunion, dans le ticket, dans le nom de la classe, dans le message d'erreur, dans le test.</p>
+        <p class="lead">Le benefice n'est pas cosmetique. Chaque traduction mentale (<i>"le type 0, c'est bien Celsius ?"</i>) est une occasion de se tromper.</p>
+        <p class="lead" style="font-size:14px">Le projet pousse le principe jusqu'a l'API : <code class="i">ReleveRequete</code> exige un champ <code class="i">unite</code> valant <code class="i">CELSIUS</code> ou <code class="i">FAHRENHEIT</code>. Un client HTTP ne peut pas envoyer une temperature sans unite.</p>
+      </div>
+      <div>
+        <div class="vs" style="grid-template-columns:1fr; gap:14px">
+          <div>
+            <p class="vslabel ko">&#10007; ce que le projet a evite</p>
+            <pre class="ko"><code data-lang="java">class Data {
+  int type;        // 0 = Celsius, 1 = Fahrenheit ?
+  double val;
+  Date d;
+}
+
+if (data.type == 1 &amp;&amp; data.val &gt; 35) { ... }</code></pre>
+          </div>
+          <div>
+            <p class="vslabel ok">&#10003; fr/meteo/surveillance/domaine/modele/UniteTemperature.java</p>
+            <pre class="ok"><code data-lang="java">public enum UniteTemperature {
+  CELSIUS("C"),
+  FAHRENHEIT("F");
+}
+
+// et a l'usage, le metier se lit a voix haute :
+ReleveTemperature releve = new ReleveTemperature(
+    jour, Temperature.celsius(37));
+
+if (seuil.estFranchiPar(releve)) { ... }</code></pre>
+          </div>
+        </div>
+        <p class="lead" style="margin:14px 0 0; font-size:14px">La seconde version se relit devant un meteorologue. Il peut valider, ou corriger, la regle sans savoir lire du Java.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 17 -->
+  <section class="slide">
+    <p class="num">Langage &middot; 17<span class="disc ddd">DDD</span></p>
+    <h2>Le glossaire du projet</h2>
+    <p class="lead">Chaque mot du metier devient un type du code. La colonne du milieu est la <b class="hl">brique DDD</b> choisie : c'est elle qu'on definit dans toute la suite du cours.</p>
+    <div class="card" style="overflow-x:auto">
+      <table>
+        <thead><tr><th>Terme metier</th><th>Brique DDD</th><th>Role</th></tr></thead>
+        <tbody>
+          <tr><td class="term">Temperature</td><td><span class="muted">objet-valeur</span></td><td>valeur + unite, immuable, sait convertir et comparer</td></tr>
+          <tr><td class="term">Localisation</td><td><span class="muted">objet-valeur</span></td><td>ville + code postal d'une station</td></tr>
+          <tr><td class="term">StationId</td><td><span class="muted">objet-valeur</span></td><td>identite typee, propre a chaque contexte</td></tr>
+          <tr><td class="term">ReleveTemperature</td><td><span class="muted">objet-valeur</span></td><td>une mesure pour un jour donne</td></tr>
+          <tr><td class="term">SeuilCanicule</td><td><span class="muted">politique</span></td><td>la regle chiffree : 35&deg;C pendant 3 jours</td></tr>
+          <tr><td class="term">StationMeteo</td><td><span class="muted">agregat</span></td><td>garde l'invariant "un releve par jour"</td></tr>
+          <tr><td class="term">Canicule</td><td><span class="muted">agregat</span></td><td>periode de chaleur soutenue detectee</td></tr>
+          <tr><td class="term">DetecteurCanicule</td><td><span class="muted">service de domaine</span></td><td>transforme une serie de releves en canicules</td></tr>
+          <tr><td class="term">DepotStationMeteo</td><td><span class="muted">depot (port)</span></td><td>charge et sauvegarde une station, sans dire comment</td></tr>
+          <tr><td class="term2">Station</td><td><span class="muted">agregat &middot; <b>contexte maintenance</b></span></td><td>equipement dont l'etalonnage doit rester valide</td></tr>
+          <tr><td class="term2">NumeroSerie</td><td><span class="muted">objet-valeur &middot; <b>contexte maintenance</b></span></td><td>reference gravee sur le boitier, format <code style="font-family:var(--font-mono)">MF-123456</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 18 -->
+  <section class="slide">
+    <p class="num">Le piege n&deg;1 &middot; 18<span class="disc ddd">DDD</span></p>
+    <h2>Le modele anemique</h2>
+    <div class="cols wide-left" style="align-items:start">
+      <div>
+        <p class="lead">Depuis la slide 05 on manipule des objets-valeurs sans avoir dit <b class="hl">contre quoi</b> ils nous protegent. Le voici.</p>
+        <div class="defbox" style="--c:var(--canicule)">
+          <span class="term-en">Anemic domain model</span>
+          <p>Une classe reduite a des champs, des getters et des setters. Elle porte des <b>donnees</b>, aucune <b>regle</b>.</p>
+          <p>Le comportement metier part alors vivre ailleurs, en general dans un "Service" fourre-tout.</p>
+        </div>
+        <p class="lead" style="font-size:14px">Ce n'est pas un bug : cela compile, cela passe les tests. Cela se paie plus tard, le jour ou la meme regle existe en trois exemplaires legerement differents &mdash; et ou l'un des trois est faux.</p>
+      </div>
+      <div>
+        <p class="vslabel ko">&#10007; anemique &middot; un sac de donnees</p>
+        <pre class="ko"><code data-lang="java">class Temperature {
+  double valeur;   // 25 ? En Celsius ? En Fahrenheit ?
+  void setValeur(double v) { this.valeur = v; }
+  double getValeur() { return valeur; }
+}
+
+// la regle metier finit dupliquee, loin du modele
+if (t1.getValeur() &gt;= 35) { ... }  // dans le controleur
+if (t2.getValeur() &gt;= 35) { ... }  // et dans le batch</code></pre>
+
+        <p class="vslabel ok" style="margin-top:16px">&#10003; riche &middot; la donnee ET la regle</p>
+        <pre class="ok"><code data-lang="java">public final class Temperature {
+  private final double valeur;
+  private final UniteTemperature unite;
+
+  public boolean atteintOuDepasse(Temperature seuil) {
+    return valeurEnCelsius() &gt;= seuil.valeurEnCelsius();
+  }
+}
+
+// un seul endroit fait autorite ; l'appel se lit
+releve.temperature().atteintOuDepasse(seuil);</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 19 -->
+  <section class="slide">
+    <p class="num">Le piege n&deg;1 &middot; 19<span class="disc ddd">DDD</span></p>
+    <h2>Pourquoi on a commence par les objets-valeurs</h2>
+    <p class="lead">Chaque objet-valeur croise depuis la slide 05 existe pour rendre une phrase <b class="hl">impossible a ecrire</b>. Mis bout a bout, ils forment un modele qui ne peut pas devenir anemique : la regle n'a nulle part ailleurs ou aller.</p>
+    <div class="card" style="overflow-x:auto">
+      <table>
+        <thead><tr><th>Objet-valeur</th><th>Rend impossible</th><th>Le mecanisme</th></tr></thead>
+        <tbody>
+          <tr><td class="term">Temperature</td><td>comparer 25&deg;C et 77&deg;F sans voir que c'est la meme chaleur</td><td><span class="muted"><code style="font-family:var(--font-mono)">equals</code> sur la valeur en Celsius</span></td></tr>
+          <tr><td class="term">Localisation</td><td>une station sans ville</td><td><span class="muted">constructeur compact validant</span></td></tr>
+          <tr><td class="term">StationId</td><td>passer un identifiant de canicule la ou on attend une station</td><td><span class="muted">type dedie, verifie a la compilation</span></td></tr>
+          <tr><td class="term">ReleveTemperature</td><td>une mesure sans jour, ou un jour sans mesure</td><td><span class="muted">record a deux champs obligatoires</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="cols" style="margin-top:22px; align-items:start">
+      <div class="defbox" style="--c:var(--domaine); margin:0">
+        <span class="term-en">La regle de pouce</span>
+        <p>Si vous ecrivez <code>objet.getX()</code> pour decider quelque chose <b>a propos de cet objet</b>, la decision appartient sans doute a l'objet.</p>
+      </div>
+      <div>
+        <p class="lead" style="margin:0">Un getter n'est pas interdit. Il devient suspect des qu'il sert a prendre, <b class="hl">a l'exterieur</b>, une decision que l'objet pourrait prendre lui-meme.</p>
+        <p class="lead" style="margin:12px 0 0; font-size:14px"><code class="i">CaniculeReponse.depuis(c)</code> appelle six getters : c'est legitime, il traduit vers le monde exterieur, il ne decide rien.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 20 -->
+  <section class="slide">
+    <p class="num">Brique tactique &middot; 20<span class="disc ddd">DDD</span></p>
+    <div class="cols wide-left">
+      <div>
+        <h2>Typer jusqu'aux identifiants</h2>
+        <div class="defbox" style="--c:var(--canicule)">
+          <span class="term-en">Primitive obsession</span>
+          <p>Representer un concept metier par un type technique nu (<code>String</code>, <code>UUID</code>, <code>int</code>). Le compilateur ne peut alors plus rien verifier pour vous.</p>
+        </div>
+        <p class="lead">Un <code class="i">UUID</code> de station et un <code class="i">UUID</code> de canicule ont exactement le meme type. Les intervertir compile parfaitement, et se decouvre en production.</p>
+        <p class="lead">Emballer chaque identite dans un objet-valeur d'une ligne transforme le compilateur en <b class="hl">garde-fou metier</b>. C'est le meilleur rapport effort/benefice de tout le DDD.</p>
+        <p class="lead" style="font-size:14px">Et comme vu slide 10, cette protection joue aussi <b class="hl">entre contextes</b> : les deux <code class="i">StationId</code> ne sont pas interchangeables non plus.</p>
+      </div>
+      <div>
+        <div class="vs" style="grid-template-columns:1fr; gap:14px">
+          <div>
+            <p class="vslabel ko">&#10007; tout est UUID</p>
+            <pre class="ko"><code data-lang="java">void detecterPour(UUID id) { ... }
+
+UUID station  = ...;
+UUID canicule = ...;
+detecterPour(canicule);   // compile. Casse a l'execution.</code></pre>
+          </div>
+          <div>
+            <p class="vslabel ok">&#10003; fr/meteo/surveillance/domaine/modele/StationId.java</p>
+            <pre class="ok"><code data-lang="java">public record StationId(UUID valeur) {
+
+  public StationId {
+    Objects.requireNonNull(valeur,
+        "L'identifiant de station est obligatoire");
+  }
+
+  public static StationId nouveau() {
+    return new StationId(UUID.randomUUID());
+  }
+  public static StationId de(String valeur) {
+    return new StationId(UUID.fromString(valeur));
+  }
+}
+
+void detecterPour(StationId id) { ... }
+detecterPour(caniculeId);   // ERREUR DE COMPILATION</code></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 21 -->
+  <section class="slide">
+    <p class="num">Brique tactique &middot; 21<span class="disc ddd">DDD</span></p>
+    <h2>Entite ou objet-valeur ?</h2>
+    <p class="lead">La question a se poser devant chaque nouveau concept. Une seule chose la tranche : <b class="hl">deux exemplaires de meme contenu sont-ils interchangeables ?</b> Si oui, objet-valeur. Si non, entite.</p>
+    <div class="card" style="overflow-x:auto">
+      <table>
+        <thead><tr><th>Critere</th><th>Objet-valeur</th><th>Entite</th></tr></thead>
+        <tbody>
+          <tr><td class="lbl">Ce qui le definit</td><td>son contenu</td><td>son identite, stable dans le temps</td></tr>
+          <tr><td class="lbl">Egalite</td><td><span class="muted">tous les champs sont egaux</span></td><td><span class="muted">les identifiants sont egaux</span></td></tr>
+          <tr><td class="lbl">Cycle de vie</td><td><span class="muted">aucun : cree, jete, recree librement</span></td><td><span class="muted">suivi : nait, evolue, est archive</span></td></tr>
+          <tr><td class="lbl">Mutabilite</td><td><span class="muted">immuable, toujours</span></td><td><span class="muted">son etat evolue, sous controle</span></td></tr>
+          <tr><td class="lbl">Dans ce projet</td><td><span class="muted">Temperature, Localisation, ReleveTemperature, StationId, NumeroSerie</span></td><td><span class="muted">StationMeteo, Canicule, Station (maintenance)</span></td></tr>
+          <tr><td class="lbl">Analogie</td><td><span class="muted">un billet de 10 &euro;</span></td><td><span class="muted">votre compte bancaire</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="sub" style="margin-top:16px">Deux stations situees a la meme adresse restent <b>deux stations</b> : elles ont chacune leur identite, leur historique. Deux releves de 30&deg;C le meme jour sont, eux, strictement le meme fait.</p>
+  </section>
+
+  <!-- 22 -->
+  <section class="slide">
+    <p class="num">Brique tactique &middot; 22<span class="disc ddd">DDD</span></p>
+    <div class="cols">
+      <div>
+        <h2>Agregat : la theorie</h2>
+        <div class="defbox" style="--c:var(--application)">
+          <span class="term-en">Aggregate &middot; aggregate root</span>
+          <p>Une <b>grappe d'objets</b> qu'on charge, modifie et sauvegarde comme un tout. Un seul objet de la grappe est visible de l'exterieur : la <b>racine</b>.</p>
+          <p>La racine est la <b>frontiere de coherence</b> : elle seule laisse entrer une modification, donc elle seule peut garantir les regles.</p>
+        </div>
+        <div class="defbox" style="--c:var(--tiede); margin-bottom:0">
+          <span class="term-en">Invariant</span>
+          <p>Une regle qui doit <b>toujours</b> etre vraie, a chaque instant. Ici : "une station a au plus un releve par jour".</p>
+        </div>
+      </div>
+      <div>
+        <p class="filetag">Les quatre regles de conception</p>
+        <ol class="steps" style="--accent:var(--application)">
+          <li><b>Un agregat protege un invariant reel.</b> Pas de grappe "parce que c'est pratique" : s'il n'y a rien a garantir, il n'y a pas d'agregat.</li>
+          <li><b>Le plus petit possible.</b> Une grosse grappe se charge lentement et se verrouille souvent.</li>
+          <li><b>Un agregat en reference un autre par son identite</b>, jamais par un pointeur direct sur l'objet.</li>
+          <li><b>Une transaction ne modifie qu'un agregat.</b> Les autres suivent, plus tard.</li>
+        </ol>
+        <p class="lead" style="margin:14px 0 0; font-size:14px">Regle 4, dans le code : <code class="i">ServiceDetectionCanicule</code> charge une <code class="i">StationMeteo</code> mais ne sauvegarde que des <code class="i">Canicule</code>. Les deux agregats ne sont jamais ecrits ensemble.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 23 -->
+  <section class="slide">
+    <p class="num">Brique tactique &middot; 23<span class="disc ddd">DDD</span></p>
+    <div class="cols wide-right">
+      <div>
+        <h2>Agregat : garder l'invariant</h2>
+        <p class="lead">Deux mecanismes, et ils sont indissociables. Le premier verifie la regle ; le second empeche de le contourner.</p>
+        <ul class="pts" style="--accent:var(--application)">
+          <li><b>Une methode metier nommee</b> <span class="g">— <code>enregistrer(releve)</code>, et non <code>getReleves().add(...)</code>. C'est le seul chemin d'entree.</span></li>
+          <li><b>Une collection encapsulee</b> <span class="g">— l'exterieur ne recoit qu'une copie non modifiable. Sans cela, le premier mecanisme ne sert a rien.</span></li>
+          <li><b>Une exception du metier</b> <span class="g">— <code>ReleveDejaPresentException</code> vit dans le domaine : c'est un evenement du langage, pas une panne technique.</span></li>
+        </ul>
+        <p class="lead" style="margin-top:14px; font-size:14px">Les quatre tests de <code class="i">StationMeteoTest</code> verrouillent exactement ces trois points, dont <code class="i">la_liste_exposee_est_non_modifiable</code>.</p>
+      </div>
+      <div>
+        <p class="filetag">fr/meteo/surveillance/domaine/modele/StationMeteo.java</p>
+        <pre><code data-lang="java">public class StationMeteo {           // racine d'agregat
+
+  private final StationId id;
+  private final Localisation localisation;
+  private final List&lt;ReleveTemperature&gt; releves;  // interne
+
+  // seul chemin pour ajouter un releve : l'invariant tient
+  public void enregistrer(ReleveTemperature releve) {
+    boolean jourDejaConnu = releves.stream()
+        .anyMatch(r -&gt; r.jour().equals(releve.jour()));
+    if (jourDejaConnu) {
+      throw new ReleveDejaPresentException(id, releve.jour());
+    }
+    releves.add(releve);
+  }
+
+  // copie NON MODIFIABLE : impossible de contourner la regle
+  public List&lt;ReleveTemperature&gt; releves() {
+    return releves.stream()
+        .sorted(Comparator.comparing(ReleveTemperature::jour))
+        .toList();
+  }
+
+  // l'identite, et elle seule, definit l'egalite
+  @Override
+  public boolean equals(Object o) {
+    return o instanceof StationMeteo autre &amp;&amp; id.equals(autre.id);
+  }
+}</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 24 -->
+  <section class="slide">
+    <p class="num">Brique tactique &middot; 24<span class="disc ddd">DDD</span></p>
+    <div class="cols wide-right">
+      <div>
+        <h2>Un autre agregat, un autre invariant</h2>
+        <p class="lead">La <code class="i2">Station</code> du contexte maintenance est aussi une racine d'agregat. Comparez-la a <code class="i">StationMeteo</code> : meme brique DDD, regles opposees.</p>
+        <ul class="pts" style="--accent:var(--tiede)">
+          <li><b>Etat mutable</b> <span class="g">: <code>etat</code> et <code>dernierEtalonnage</code> changent au fil du temps. <code>StationMeteo</code>, elle, ne fait qu'accumuler.</span></li>
+          <li><b>L'invariant vit dans la methode</b> <span class="g">: on ne peut pas passer <code>EN_SERVICE</code> par un setter, seulement par <code>mettreEnService</code>, qui verifie.</span></li>
+          <li><b>Vocabulaire etranger a l'autre contexte</b> <span class="g">: "etalonnage perime" ne veut rien dire pour un detecteur de canicules.</span></li>
+        </ul>
+        <p class="lead" style="margin-top:14px; font-size:14px">Les deux sont des <b class="hl">entites</b> : leur identite survit aux changements d'etat.</p>
+      </div>
+      <div>
+        <p class="filetag">fr/meteo/maintenance/domaine/modele/Station.java</p>
+        <pre class="c2"><code data-lang="java">public class Station {
+
+  public static final int VALIDITE_ETALONNAGE_JOURS = 365;
+
+  private final StationId id;
+  private final NumeroSerie numeroSerie;
+  private EtatOperationnel etat;          // l'etat evolue
+  private LocalDate dernierEtalonnage;
+
+  public void mettreEnService(LocalDate aujourdHui) {
+    if (etalonnagePerime(aujourdHui)) {
+      throw new EtalonnagePerimeException(id, dernierEtalonnage);
+    }
+    this.etat = EtatOperationnel.EN_SERVICE;
+  }
+
+  public boolean etalonnagePerime(LocalDate aujourdHui) {
+    return ChronoUnit.DAYS.between(dernierEtalonnage, aujourdHui)
+        &gt; VALIDITE_ETALONNAGE_JOURS;
+  }
+}</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 25 -->
+  <section class="slide">
+    <p class="num">Brique tactique &middot; 25<span class="disc ddd">DDD</span></p>
+    <div class="cols wide-left">
+      <div>
+        <h2>Reference par identite</h2>
+        <p class="lead">Une <code class="i">Canicule</code> concerne une station. La tentation est de lui donner un champ <code class="i">StationMeteo</code>. C'est la troisieme regle de l'agregat qui l'interdit, pour deux raisons.</p>
+        <ul class="pts" style="--accent:var(--chaud)">
+          <li><b>Coherence</b> <span class="g">: si la canicule detient la station, n'importe qui peut la modifier <i>a travers</i> la canicule, et l'invariant n'est plus garanti par la station.</span></li>
+          <li><b>Chargement</b> <span class="g">: lire une canicule chargerait la station et tous ses releves. Deux agregats se chargent et se sauvegardent independamment.</span></li>
+        </ul>
+        <p class="lead" style="margin-top:14px">La <code class="i">Canicule</code> recopie en revanche la <code class="i">Localisation</code> dont elle a besoin pour s'afficher : un objet-valeur se duplique sans probleme, puisqu'il n'a pas d'identite.</p>
+      </div>
+      <div>
+        <div class="vs" style="grid-template-columns:1fr; gap:14px">
+          <div>
+            <p class="vslabel ko">&#10007; un agregat en contient un autre</p>
+            <pre class="ko"><code data-lang="java">class Canicule {
+  private StationMeteo station;   // toute la grappe
+}
+
+// l'invariant de la station est contournable d'ici :
+canicule.getStation().enregistrer(releve);</code></pre>
+          </div>
+          <div>
+            <p class="vslabel ok">&#10003; fr/meteo/surveillance/domaine/modele/Canicule.java</p>
+            <pre class="ok"><code data-lang="java">public class Canicule {          // agregat independant
+
+  private final CaniculeId id;
+  private final StationId stationId;       // une identite
+  private final Localisation localisation; // objet-valeur, copie
+  private final LocalDate dateDebut;
+  private final LocalDate dateFin;
+  private final Temperature temperaturePic;
+}</code></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 26 -->
+  <section class="slide">
+    <p class="num">Brique tactique &middot; 26<span class="disc ddd">DDD</span></p>
+    <div class="cols wide-right">
+      <div>
+        <h2>La fabrique</h2>
+        <div class="defbox" style="--c:var(--domaine)">
+          <span class="term-en">Factory</span>
+          <p>Une methode qui sait construire un objet du domaine <b>deja valide et complet</b>, a partir de ce que l'appelant possede vraiment.</p>
+        </div>
+        <p class="lead">Le constructeur de <code class="i">Canicule</code> est prive. On ne lui passe donc jamais une date de fin ni un pic : ce serait donner a l'appelant l'occasion de les calculer faux.</p>
+        <p class="lead">On lui passe les releves, et <b class="hl">le domaine deduit lui-meme</b> le debut, la fin et le pic. Un objet du domaine est valide des sa naissance, et le reste.</p>
+        <p class="lead" style="font-size:14px"><code class="i">reconstituer(...)</code> est la fabrique jumelle, reservee a l'adaptateur de persistance : elle revalide les invariants au rechargement.</p>
+      </div>
+      <div>
+        <p class="filetag">fr/meteo/surveillance/domaine/modele/Canicule.java</p>
+        <pre><code data-lang="java">// fabrique nommee : le nom dit dans quel cas on l'emploie
+public static Canicule surPeriode(StationId stationId,
+    Localisation localisation, List&lt;ReleveTemperature&gt; releves) {
+
+  if (releves == null || releves.isEmpty()) {
+    throw new IllegalArgumentException(
+        "Une canicule couvre au moins un releve");
+  }
+
+  // le domaine calcule, l'appelant ne fournit pas
+  LocalDate debut = releves.getFirst().jour();
+  LocalDate fin   = releves.getLast().jour();
+  Temperature pic = releves.stream()
+      .map(ReleveTemperature::temperature)
+      .reduce((a, b) -&gt; a.estPlusChaudeQue(b) ? a : b)
+      .orElseThrow();
+
+  return new Canicule(CaniculeId.nouveau(), stationId,
+                      localisation, debut, fin, pic);
+}
+
+// du comportement, pas une donnee stockee et vieillissante
+public long nombreDeJours() {
+  return ChronoUnit.DAYS.between(dateDebut, dateFin) + 1;
+}</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 27 -->
+  <section class="slide">
+    <p class="num">Brique tactique &middot; 27<span class="disc ddd">DDD</span></p>
+    <div class="cols wide-left">
+      <div>
+        <h2>La politique metier</h2>
+        <div class="defbox" style="--c:var(--tiede)">
+          <span class="term-en">Policy &middot; specification</span>
+          <p>Un objet-valeur dont le seul role est de <b>porter une regle chiffree</b> et de savoir repondre : "est-ce que ceci la satisfait ?"</p>
+        </div>
+        <p class="lead">Les nombres <code class="i">35</code> et <code class="i">3</code> sont de la <b class="hl">connaissance metier</b>. Laisses nus dans une condition, ils sont invisibles, dupliques, et personne ne sait plus d'ou ils viennent.</p>
+        <ul class="pts" style="--accent:var(--tiede)">
+          <li><b>Un seul endroit a changer</b> <span class="g">quand Meteo-France revise ses criteres.</span></li>
+          <li><b>Testable isolement</b> <span class="g">: <code>DetecteurCaniculeTest</code> injecte son propre seuil.</span></li>
+          <li><b>Remplacable</b> <span class="g">: un seuil different par region, sans toucher au detecteur.</span></li>
+        </ul>
+      </div>
+      <div>
+        <div class="vs" style="grid-template-columns:1fr; gap:14px">
+          <div>
+            <p class="vslabel ko">&#10007; nombres magiques</p>
+            <pre class="ko"><code data-lang="java">if (temp &gt;= 35 &amp;&amp; joursConsecutifs &gt;= 3) {
+  // pourquoi 35 ? pourquoi 3 ? qui l'a decide ?
+}</code></pre>
+          </div>
+          <div>
+            <p class="vslabel ok">&#10003; fr/meteo/surveillance/domaine/modele/SeuilCanicule.java</p>
+            <pre class="ok"><code data-lang="java">public record SeuilCanicule(Temperature temperatureSeuil,
+                            int joursConsecutifsMin) {
+
+  public SeuilCanicule {
+    if (joursConsecutifsMin &lt; 1) {
+      throw new IllegalArgumentException(
+          "Il faut au moins 1 jour consecutif");
+    }
+  }
+
+  // criteres francais : 3 jours au-dela de 35 C
+  public static SeuilCanicule parDefaut() {
+    return new SeuilCanicule(Temperature.celsius(35), 3);
+  }
+
+  public boolean estFranchiPar(ReleveTemperature releve) {
+    return releve.temperature()
+                 .atteintOuDepasse(temperatureSeuil);
+  }
+}</code></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 28 -->
+  <section class="slide">
+    <p class="num">Brique tactique &middot; 28<span class="disc ddd">DDD</span><span class="disc hex">HEXAGONE</span></p>
+    <h2>Trois objets s'appellent "service"</h2>
+    <p class="lead">Le mot est use jusqu'a la corde. En DDD il designe trois choses distinctes, qui vivent dans trois couches differentes. Les confondre, c'est ramener la technique dans le coeur.</p>
+    <div class="card" style="overflow-x:auto; margin-bottom:16px">
+      <table>
+        <thead><tr><th>Sorte de service</th><th>Repond a</th><th>Couche</th><th>Dans le depot</th></tr></thead>
+        <tbody>
+          <tr><td class="term">de domaine</td><td><span class="muted">une regle metier qui n'appartient a aucun agregat</span></td><td><span class="muted">domaine &middot; Java pur</span></td><td class="term">DetecteurCanicule</td></tr>
+          <tr><td class="term">applicatif</td><td><span class="muted">orchestrer un cas d'usage : charger, deleguer, sauvegarder</span></td><td><span class="muted">application</span></td><td class="term">ServiceDetectionCanicule</td></tr>
+          <tr><td class="term">d'infrastructure</td><td><span class="muted">parler au monde reel : base, mail, log</span></td><td><span class="muted">adaptateur</span></td><td class="term">NotificateurCaniculeLog</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="sub" style="margin-top:0">Le service <b>de domaine decide</b>. Le service <b>applicatif coordonne</b>, mais ne decide de rien. Le service <b>d'infrastructure execute</b>. Si votre service applicatif contient un <code class="i">if</code> sur une regle metier, cette regle est au mauvais endroit.</p>
+  </section>
+
+  <!-- 29 -->
+  <section class="slide">
+    <p class="num">Brique tactique &middot; 29<span class="disc ddd">DDD</span></p>
+    <div class="cols wide-right">
+      <div>
+        <h2>Service de domaine</h2>
+        <p class="lead">Detecter les canicules ne rentre naturellement dans aucun agregat : il faut raisonner sur une <b class="hl">serie</b> de releves, et en produire de <b class="hl">nouveaux</b> agregats <code class="i">Canicule</code>.</p>
+        <p class="lead">Quand une regle n'a pas de proprietaire evident, on ne la force pas dans un agregat : on cree un service de domaine.</p>
+        <ul class="pts" style="--accent:var(--tiede)">
+          <li><b>Sans etat</b> <span class="g">: aucun champ mutable, donc trivialement testable.</span></li>
+          <li><b>Vocabulaire 100% metier</b> <span class="g">: <code>seContinue</code>, <code>cloturer</code>.</span></li>
+          <li><b>Pas</b> un <span style="font-family:var(--font-mono);color:var(--code-ann)">@Service</span> Spring <span class="g">: du Java pur, executable dans un simple <code>main()</code>.</span></li>
+        </ul>
+        <p class="lead" style="margin-top:14px; font-size:14px">Les 5 tests de <code class="i">DetecteurCaniculeTest</code> tournent en 22 ms, sans contexte Spring.</p>
+      </div>
+      <div>
+        <p class="filetag">fr/meteo/surveillance/domaine/service/DetecteurCanicule.java</p>
+        <pre><code data-lang="java">public class DetecteurCanicule {   // aucune annotation
+
+  public List&lt;Canicule&gt; detecter(StationMeteo station,
+                                 SeuilCanicule seuil) {
+    List&lt;Canicule&gt; canicules = new ArrayList&lt;&gt;();
+    List&lt;ReleveTemperature&gt; serieEnCours = new ArrayList&lt;&gt;();
+
+    for (ReleveTemperature releve : station.releves()) {
+      if (seuil.estFranchiPar(releve)
+          &amp;&amp; seContinue(serieEnCours, releve)) {
+        serieEnCours.add(releve);
+      } else {
+        cloturer(serieEnCours, seuil, station, canicules);
+        serieEnCours = new ArrayList&lt;&gt;();
+        if (seuil.estFranchiPar(releve)) serieEnCours.add(releve);
+      }
+    }
+    cloturer(serieEnCours, seuil, station, canicules);
+    return canicules;
+  }
+
+  // un releve prolonge la serie s'il tombe le lendemain
+  private boolean seContinue(List&lt;ReleveTemperature&gt; serie,
+                             ReleveTemperature releve) {
+    if (serie.isEmpty()) return true;
+    return releve.jour().equals(serie.getLast().jour().plusDays(1));
+  }
+}</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 30 -->
+  <section class="slide">
+    <p class="num">Brique tactique &middot; 30<span class="disc ddd">DDD</span><span class="disc hex">HEXAGONE</span></p>
+    <div class="cols wide-right">
+      <div>
+        <h2>Service applicatif</h2>
+        <p class="lead">Il met en scene un cas d'usage, toujours selon le meme rythme en trois temps. Notez ce qu'il ne fait <b class="hl">pas</b> : il ne calcule aucune regle.</p>
+        <ol class="steps" style="--accent:var(--application)">
+          <li><b>Charger</b> l'agregat, via un port sortant.</li>
+          <li><b>Deleguer</b> la decision au domaine.</li>
+          <li><b>Persister</b> le resultat et declencher les effets de bord, via d'autres ports sortants.</li>
+        </ol>
+        <p class="lead" style="margin-top:14px">Il ne connait que des <b class="hl">interfaces</b>. Il ignore totalement qu'il y a une base H2 derriere <code class="i">DepotCanicule</code>, et un logger derriere <code class="i">NotificateurCanicule</code>.</p>
+      </div>
+      <div>
+        <p class="filetag">fr/meteo/surveillance/application/service/ServiceDetectionCanicule.java</p>
+        <pre><code data-lang="java">public List&lt;Canicule&gt; detecterPour(StationId stationId) {
+
+  // 1. CHARGER via un port sortant
+  StationMeteo station = depotStations.parId(stationId)
+      .orElseThrow(() -&gt; new StationIntrouvableException(stationId));
+
+  List&lt;Canicule&gt; deja = depotCanicules.parStation(stationId);
+
+  // 2. DELEGUER la regle au domaine : aucune decision ici
+  List&lt;Canicule&gt; nouvelles = detecteur.detecter(station, seuil)
+      .stream()
+      .filter(candidate -&gt; estInedite(candidate, deja))
+      .toList();
+
+  // 3. PERSISTER + effet de bord, via des ports sortants
+  nouvelles.forEach(canicule -&gt; {
+    depotCanicules.sauvegarder(canicule);
+    notificateur.alerter(canicule);
+  });
+
+  return nouvelles;
+}</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 31 -->
+  <section class="slide">
+    <p class="num">Recapitulatif &middot; 31<span class="disc ddd">DDD</span></p>
+    <h2>La carte des briques</h2>
+    <p class="lead">Tout le vocabulaire tactique du DDD, dans l'ordre ou vous vous poserez les questions en concevant un modele.</p>
+    <div class="bricks">
+      <div class="brick" style="--c:var(--froid)">
+        <h3>Contexte delimite</h3>
+        <p>La frontiere ou un mot change de sens. Se decide avant tout le reste.</p>
+        <span class="ex">surveillance | maintenance</span>
+      </div>
+      <div class="brick" style="--c:var(--domaine)">
+        <h3>Objet-valeur</h3>
+        <p>Defini par son contenu. Immuable, sans identite, auto-validant.</p>
+        <span class="ex">Temperature &middot; Localisation</span>
+      </div>
+      <div class="brick" style="--c:var(--froid)">
+        <h3>Entite</h3>
+        <p>Definie par son identite, qui survit aux changements d'etat.</p>
+        <span class="ex">StationMeteo &middot; Canicule</span>
+      </div>
+      <div class="brick" style="--c:var(--application)">
+        <h3>Agregat</h3>
+        <p>Grappe traitee comme un tout. Sa racine garde l'invariant.</p>
+        <span class="ex">StationMeteo + ses releves</span>
+      </div>
+      <div class="brick" style="--c:var(--tiede)">
+        <h3>Fabrique</h3>
+        <p>Construit un objet deja valide. Le domaine calcule, l'appelant fournit le brut.</p>
+        <span class="ex">Canicule.surPeriode(...)</span>
+      </div>
+      <div class="brick" style="--c:var(--tiede)">
+        <h3>Politique</h3>
+        <p>Une regle chiffree devenue un objet nomme et testable.</p>
+        <span class="ex">SeuilCanicule</span>
+      </div>
+      <div class="brick" style="--c:var(--chaud)">
+        <h3>Service de domaine</h3>
+        <p>Une regle qui n'appartient a aucun agregat. Sans etat.</p>
+        <span class="ex">DetecteurCanicule</span>
+      </div>
+      <div class="brick" style="--c:var(--canicule)">
+        <h3>Depot</h3>
+        <p>Le besoin de charger et sauvegarder, exprime en metier. Une interface.</p>
+        <span class="ex">DepotStationMeteo</span>
+      </div>
+      <div class="brick" style="--c:var(--ink-faint)">
+        <h3>Service applicatif</h3>
+        <p>Orchestre un cas d'usage. Ne decide rien, coordonne tout.</p>
+        <span class="ex">ServiceDetectionCanicule</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 32 -->
+  <section class="slide">
+    <p class="num">Architecture &middot; 32<span class="disc hex">HEXAGONE</span></p>
+    <div class="cols">
+      <div>
+        <h2>L'hexagone</h2>
+        <div class="defbox" style="--c:var(--application)">
+          <span class="term-en">La regle de dependance</span>
+          <p>Le code d'une couche <b>interne</b> ne connait jamais le nom d'une classe d'une couche <b>externe</b>. Toutes les fleches de compilation pointent vers le centre.</p>
+        </div>
+        <p class="lead">Pourquoi un hexagone ? Pour rien de precis : les six cotes suggerent seulement qu'on peut brancher <b class="hl">plusieurs</b> facons d'entrer et de sortir. Le dessin aurait pu etre un cercle.</p>
+        <p class="lead">Ce qui compte : le coeur ne depend de rien. Tout ce qui est technique est a la <b class="hl">peripherie</b> et depend du centre.</p>
+        <p class="lead" style="font-size:14px">Chaque contexte delimite a <b class="hl">son propre</b> hexagone : la maintenance a ses ports (<code class="i2">ConsulterStation</code>, <code class="i2">DepotStation</code>), son adaptateur JPA et son controleur.</p>
+      </div>
+      <div>
+        <svg class="mini" viewBox="0 0 400 340" role="img" aria-label="Schema de l'hexagone : le domaine au centre, l'application autour, les adaptateurs REST, JPA et alerte a la peripherie">
+          <polygon points="200,40 330,115 330,265 200,340 70,265 70,115" fill="color-mix(in srgb, var(--application) 14%, transparent)" stroke="var(--application)" stroke-width="2"/>
+          <polygon points="200,120 262,157 262,231 200,268 138,231 138,157" fill="color-mix(in srgb, var(--domaine) 22%, var(--bg-2))" stroke="var(--domaine)" stroke-width="2.5"/>
+          <text x="200" y="98" text-anchor="middle" font-family="var(--font-mono)" font-size="11" letter-spacing="1.5" fill="var(--application)">APPLICATION</text>
+          <text x="200" y="196" text-anchor="middle" font-family="var(--font-sans)" font-size="15" font-weight="700" fill="var(--ink)">DOMAINE</text>
+          <text x="200" y="214" text-anchor="middle" font-family="var(--font-mono)" font-size="10" fill="var(--ink-soft)">Java pur</text>
+          <circle cx="70" cy="150" r="7" fill="var(--application)" stroke="var(--bg-2)" stroke-width="3"/>
+          <circle cx="70" cy="230" r="7" fill="var(--application)" stroke="var(--bg-2)" stroke-width="3"/>
+          <circle cx="330" cy="150" r="7" fill="var(--chaud)" stroke="var(--bg-2)" stroke-width="3"/>
+          <circle cx="330" cy="230" r="7" fill="var(--canicule)" stroke="var(--bg-2)" stroke-width="3"/>
+          <rect x="6" y="128" width="46" height="30" rx="7" fill="var(--bg-2)" stroke="var(--application)" stroke-width="1.5"/>
+          <text x="29" y="147" text-anchor="middle" font-family="var(--font-mono)" font-size="9" fill="var(--ink-soft)">REST</text>
+          <rect x="348" y="128" width="46" height="30" rx="7" fill="var(--bg-2)" stroke="var(--chaud)" stroke-width="1.5"/>
+          <text x="371" y="147" text-anchor="middle" font-family="var(--font-mono)" font-size="9" fill="var(--ink-soft)">JPA</text>
+          <rect x="342" y="212" width="58" height="30" rx="7" fill="var(--bg-2)" stroke="var(--canicule)" stroke-width="1.5"/>
+          <text x="371" y="231" text-anchor="middle" font-family="var(--font-mono)" font-size="9" fill="var(--ink-soft)">ALERTE</text>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <!-- 33 -->
+  <section class="slide">
+    <p class="num">Architecture &middot; 33<span class="disc hex">HEXAGONE</span></p>
+    <h2>Les deux hexagones de ce projet</h2>
+    <p class="lead" style="max-width:100ch">Chaque contexte delimite a <b class="hl">son propre</b> hexagone : son domaine, ses ports, ses adaptateurs, sa table. Voici les deux, avec tout ce qui s'y branche. Rien ne traverse la frontiere, sauf un <b class="hl">UUID</b>.</p>
+    <svg class="graph" viewBox="0 0 1280 600" role="img"
+         aria-label="Les deux hexagones du projet : le contexte surveillance avec ses quatre ports entrants, ses trois ports sortants et leurs adaptateurs REST, JPA et journal ; le contexte maintenance avec son port entrant, son port sortant et leurs adaptateurs ; les deux contextes ne partagent qu'un identifiant UUID ; la racine de composition, exterieure aux deux, les assemble.">
+      <defs>
+        <marker id="fl-tiede" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--tiede)"/>
+        </marker>
+      </defs>
+
+      <!-- cadres de contexte -->
+      <rect x="8" y="56" width="752" height="444" rx="18" fill="none" stroke="var(--froid)" stroke-width="1.5" stroke-dasharray="7 6" opacity=".8"/>
+      <text x="22" y="46" font-family="var(--font-mono)" font-size="11" letter-spacing="1.6" fill="var(--froid)">CONTEXTE SURVEILLANCE</text>
+
+      <rect x="790" y="56" width="482" height="444" rx="18" fill="none" stroke="var(--tiede)" stroke-width="1.5" stroke-dasharray="7 6" opacity=".8"/>
+      <text x="804" y="46" font-family="var(--font-mono)" font-size="11" letter-spacing="1.6" fill="var(--tiede)">CONTEXTE MAINTENANCE</text>
+
+      <!-- ================= SURVEILLANCE ================= -->
+      <polygon points="400,180 520,250 520,390 400,460 280,390 280,250"
+               fill="color-mix(in srgb, var(--application) 12%, transparent)" stroke="var(--application)" stroke-width="2"/>
+      <polygon points="400,242 466,281 466,359 400,398 334,359 334,281"
+               fill="color-mix(in srgb, var(--domaine) 22%, var(--bg-2))" stroke="var(--domaine)" stroke-width="2.5"/>
+      <text x="400" y="214" text-anchor="middle" font-family="var(--font-mono)" font-size="9" letter-spacing="1.3" fill="var(--application)">APPLICATION</text>
+      <text x="400" y="317" text-anchor="middle" font-family="var(--font-sans)" font-size="13" font-weight="700" fill="var(--ink)">DOMAINE</text>
+      <text x="400" y="334" text-anchor="middle" font-family="var(--font-mono)" font-size="8.5" fill="var(--ink-soft)">Java pur</text>
+      <text x="400" y="484" text-anchor="middle" font-family="var(--font-mono)" font-size="8.5" fill="var(--ink-faint)">service de domaine : DetecteurCanicule</text>
+
+      <!-- adaptateurs entrants -->
+      <line x1="136" y1="285" x2="274" y2="285" stroke="var(--line-strong)" stroke-width="1.5"/>
+      <line x1="136" y1="355" x2="274" y2="355" stroke="var(--line-strong)" stroke-width="1.5"/>
+      <text x="205" y="270" text-anchor="middle" font-family="var(--font-mono)" font-size="8" fill="var(--application)">CreerStation</text>
+      <text x="205" y="280" text-anchor="middle" font-family="var(--font-mono)" font-size="8" fill="var(--application)">EnregistrerReleve</text>
+      <text x="205" y="340" text-anchor="middle" font-family="var(--font-mono)" font-size="8" fill="var(--application)">DetecterCanicules</text>
+      <text x="205" y="350" text-anchor="middle" font-family="var(--font-mono)" font-size="8" fill="var(--application)">ConsulterCanicules</text>
+      <circle cx="280" cy="285" r="6" fill="var(--application)" stroke="var(--bg-2)" stroke-width="2.5"/>
+      <circle cx="280" cy="355" r="6" fill="var(--application)" stroke="var(--bg-2)" stroke-width="2.5"/>
+
+      <rect x="16" y="261" width="120" height="48" rx="8" fill="var(--bg-2)" stroke="var(--application)" stroke-width="1.5"/>
+      <text x="76" y="278" text-anchor="middle" font-family="var(--font-mono)" font-size="8.5" fill="var(--ink)">StationController</text>
+      <text x="76" y="291" text-anchor="middle" font-family="var(--font-mono)" font-size="7" fill="var(--ink-faint)">POST /api/stations</text>
+      <text x="76" y="302" text-anchor="middle" font-family="var(--font-mono)" font-size="7" fill="var(--ink-faint)">POST .../{id}/releves</text>
+
+      <rect x="16" y="331" width="120" height="48" rx="8" fill="var(--bg-2)" stroke="var(--application)" stroke-width="1.5"/>
+      <text x="76" y="348" text-anchor="middle" font-family="var(--font-mono)" font-size="8.5" fill="var(--ink)">CaniculeController</text>
+      <text x="76" y="361" text-anchor="middle" font-family="var(--font-mono)" font-size="7" fill="var(--ink-faint)">POST .../{id}/detection</text>
+      <text x="76" y="372" text-anchor="middle" font-family="var(--font-mono)" font-size="7" fill="var(--ink-faint)">GET /api/canicules</text>
+
+      <!-- adaptateurs sortants -->
+      <line x1="526" y1="268" x2="636" y2="268" stroke="var(--line-strong)" stroke-width="1.5"/>
+      <line x1="526" y1="320" x2="636" y2="320" stroke="var(--line-strong)" stroke-width="1.5"/>
+      <line x1="526" y1="372" x2="636" y2="372" stroke="var(--line-strong)" stroke-width="1.5"/>
+      <text x="581" y="261" text-anchor="middle" font-family="var(--font-mono)" font-size="8" fill="var(--chaud)">DepotStationMeteo</text>
+      <text x="581" y="313" text-anchor="middle" font-family="var(--font-mono)" font-size="8" fill="var(--chaud)">DepotCanicule</text>
+      <text x="581" y="365" text-anchor="middle" font-family="var(--font-mono)" font-size="8" fill="var(--canicule)">NotificateurCanicule</text>
+      <circle cx="520" cy="268" r="6" fill="var(--chaud)" stroke="var(--bg-2)" stroke-width="2.5"/>
+      <circle cx="520" cy="320" r="6" fill="var(--chaud)" stroke="var(--bg-2)" stroke-width="2.5"/>
+      <circle cx="520" cy="372" r="6" fill="var(--canicule)" stroke="var(--bg-2)" stroke-width="2.5"/>
+
+      <rect x="638" y="245" width="110" height="46" rx="8" fill="var(--bg-2)" stroke="var(--chaud)" stroke-width="1.5"/>
+      <text x="693" y="263" text-anchor="middle" font-family="var(--font-mono)" font-size="7.6" fill="var(--ink)">StationMeteoPersistence</text>
+      <text x="693" y="277" text-anchor="middle" font-family="var(--font-mono)" font-size="7" fill="var(--ink-faint)">tables stations + releves</text>
+
+      <rect x="638" y="297" width="110" height="46" rx="8" fill="var(--bg-2)" stroke="var(--chaud)" stroke-width="1.5"/>
+      <text x="693" y="315" text-anchor="middle" font-family="var(--font-mono)" font-size="7.6" fill="var(--ink)">CaniculePersistence</text>
+      <text x="693" y="329" text-anchor="middle" font-family="var(--font-mono)" font-size="7.5" fill="var(--ink-faint)">table canicules</text>
+
+      <rect x="638" y="349" width="110" height="46" rx="8" fill="var(--bg-2)" stroke="var(--canicule)" stroke-width="1.5"/>
+      <text x="693" y="367" text-anchor="middle" font-family="var(--font-mono)" font-size="7.6" fill="var(--ink)">NotificateurCaniculeLog</text>
+      <text x="693" y="381" text-anchor="middle" font-family="var(--font-mono)" font-size="7.5" fill="var(--ink-faint)">console (SLF4J)</text>
+
+      <!-- ================= FRONTIERE ================= -->
+      <line x1="775" y1="70" x2="775" y2="486" stroke="var(--canicule)" stroke-width="1.5" stroke-dasharray="6 7" opacity=".75"/>
+      <rect x="752" y="292" width="46" height="28" rx="9" fill="var(--bg-2)" stroke="var(--canicule)" stroke-width="1.5"/>
+      <text x="775" y="311" text-anchor="middle" font-family="var(--font-mono)" font-size="10" font-weight="700" fill="var(--canicule)">UUID</text>
+      <text x="775" y="340" text-anchor="middle" font-family="var(--font-mono)" font-size="8" fill="var(--ink-faint)">correlation par valeur</text>
+      <text x="775" y="352" text-anchor="middle" font-family="var(--font-mono)" font-size="8" fill="var(--ink-faint)">aucune dependance</text>
+      <text x="775" y="364" text-anchor="middle" font-family="var(--font-mono)" font-size="8" fill="var(--ink-faint)">de code</text>
+
+      <!-- ================= MAINTENANCE ================= -->
+      <polygon points="1030,220 1100,270 1100,370 1030,420 960,370 960,270"
+               fill="color-mix(in srgb, var(--application) 12%, transparent)" stroke="var(--application)" stroke-width="2"/>
+      <polygon points="1030,266 1068,293 1068,347 1030,374 992,347 992,293"
+               fill="color-mix(in srgb, var(--domaine) 22%, var(--bg-2))" stroke="var(--domaine)" stroke-width="2.5"/>
+      <text x="1030" y="250" text-anchor="middle" font-family="var(--font-mono)" font-size="8" letter-spacing="1.1" fill="var(--application)">APPLICATION</text>
+      <text x="1030" y="319" text-anchor="middle" font-family="var(--font-sans)" font-size="11" font-weight="700" fill="var(--ink)">DOMAINE</text>
+      <text x="1030" y="334" text-anchor="middle" font-family="var(--font-mono)" font-size="7.5" fill="var(--ink-soft)">Java pur</text>
+      <text x="1030" y="446" text-anchor="middle" font-family="var(--font-mono)" font-size="8" fill="var(--ink-faint)">pas de service de domaine :</text>
+      <text x="1030" y="458" text-anchor="middle" font-family="var(--font-mono)" font-size="8" fill="var(--ink-faint)">aucune regle n'echappe a l'agregat</text>
+
+      <line x1="896" y1="320" x2="954" y2="320" stroke="var(--line-strong)" stroke-width="1.5"/>
+      <text x="925" y="313" text-anchor="middle" font-family="var(--font-mono)" font-size="7" fill="var(--application)">ConsulterStation</text>
+      <circle cx="960" cy="320" r="6" fill="var(--application)" stroke="var(--bg-2)" stroke-width="2.5"/>
+
+      <rect x="806" y="296" width="90" height="48" rx="8" fill="var(--bg-2)" stroke="var(--application)" stroke-width="1.5"/>
+      <text x="851" y="313" text-anchor="middle" font-family="var(--font-mono)" font-size="7.6" fill="var(--ink)">StationMaintenance</text>
+      <text x="851" y="324" text-anchor="middle" font-family="var(--font-mono)" font-size="7.6" fill="var(--ink)">Controller</text>
+      <text x="851" y="337" text-anchor="middle" font-family="var(--font-mono)" font-size="6.6" fill="var(--ink-faint)">GET /api/maintenance</text>
+
+      <line x1="1106" y1="320" x2="1168" y2="320" stroke="var(--line-strong)" stroke-width="1.5"/>
+      <text x="1137" y="313" text-anchor="middle" font-family="var(--font-mono)" font-size="7.5" fill="var(--chaud)">DepotStation</text>
+      <circle cx="1100" cy="320" r="6" fill="var(--chaud)" stroke="var(--bg-2)" stroke-width="2.5"/>
+
+      <rect x="1170" y="296" width="96" height="48" rx="8" fill="var(--bg-2)" stroke="var(--chaud)" stroke-width="1.5"/>
+      <text x="1218" y="313" text-anchor="middle" font-family="var(--font-mono)" font-size="7.6" fill="var(--ink)">StationPersistence</text>
+      <text x="1218" y="326" text-anchor="middle" font-family="var(--font-mono)" font-size="7" fill="var(--ink-faint)">table</text>
+      <text x="1218" y="336" text-anchor="middle" font-family="var(--font-mono)" font-size="6.6" fill="var(--ink-faint)">stations_maintenance</text>
+
+      <!-- ================= RACINE DE COMPOSITION ================= -->
+      <path d="M 470 528 L 402 468" stroke="var(--tiede)" stroke-width="1.5" stroke-dasharray="5 5" fill="none" marker-end="url(#fl-tiede)"/>
+      <path d="M 828 528 L 1028 428" stroke="var(--tiede)" stroke-width="1.5" stroke-dasharray="5 5" fill="none" marker-end="url(#fl-tiede)"/>
+
+      <rect x="390" y="528" width="500" height="56" rx="12" fill="var(--bg-2)" stroke="var(--tiede)" stroke-width="1.5"/>
+      <text x="640" y="550" text-anchor="middle" font-family="var(--font-mono)" font-size="10" font-weight="700" fill="var(--ink)">fr.meteo.config &mdash; racine de composition</text>
+      <text x="640" y="567" text-anchor="middle" font-family="var(--font-mono)" font-size="8" fill="var(--ink-soft)">connait les deux contextes ; aucun contexte ne la connait</text>
+    </svg>
+  </section>
+
+  <!-- 34 -->
+  <section class="slide">
+    <p class="num">Ports &middot; 34<span class="disc hex">HEXAGONE</span></p>
+    <h2>Deux familles de ports</h2>
+    <p class="lead">Un <b class="hl">port</b> est une interface Java, posee dans le coeur. Un <b class="hl">adaptateur</b> est la classe technique qui la branche au monde reel. Le sens de l'appel distingue les deux familles.</p>
+    <div class="cols" style="align-items:stretch">
+      <div class="card" style="border-top:3px solid var(--application)">
+        <span class="chip" style="margin-bottom:12px"><i style="--c:var(--application)"></i>Entrant &middot; pilotage</span>
+        <p class="lead" style="margin:0 0 12px">Interfaces appelees <b class="hl">DE</b> l'exterieur vers le coeur. Elles listent les cas d'usage que l'application expose. Un adaptateur entrant (<code class="i">StationController</code>) les appelle.</p>
+        <ul class="pts" style="--accent:var(--application)">
+          <li>CreerStation &middot; EnregistrerReleve</li>
+          <li>DetecterCanicules &middot; ConsulterCanicules</li>
+        </ul>
+        <p class="lead" style="margin:12px 0 0; font-size:14px">Implementes par les <b class="hl">services applicatifs</b> : <code class="i">ServiceStation</code> implemente les deux premiers.</p>
+      </div>
+      <div class="card" style="border-top:3px solid var(--chaud)">
+        <span class="chip" style="margin-bottom:12px"><i style="--c:var(--chaud)"></i>Sortant &middot; pilote</span>
+        <p class="lead" style="margin:0 0 12px">Interfaces appelees <b class="hl">PAR</b> le coeur vers l'exterieur. Elles expriment les besoins du domaine. Un adaptateur sortant (JPA, un logger) les implemente.</p>
+        <ul class="pts" style="--accent:var(--chaud)">
+          <li>DepotStationMeteo &middot; DepotCanicule</li>
+          <li>NotificateurCanicule</li>
+        </ul>
+        <p class="lead" style="margin:12px 0 0; font-size:14px">Implementes par les <b class="hl">adaptateurs</b> : <code class="i">StationMeteoPersistenceAdapter</code>, <code class="i">NotificateurCaniculeLog</code>.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 35 -->
+  <section class="slide">
+    <p class="num">Ports &middot; 35<span class="disc hex">HEXAGONE</span></p>
+    <div class="cols wide-right">
+      <div>
+        <h2>La commande, en langage du domaine</h2>
+        <p class="lead">Un port entrant ne doit pas accepter un DTO web : il serait alors couple a HTTP. Il declare son propre <b class="hl">objet de commande</b>, ecrit dans le vocabulaire du domaine.</p>
+        <p class="lead">Regardez le contraste ci-contre. <code class="i">ReleveRequete</code> parle de <code class="i">Double</code> et de <code class="i">LocalDate</code> bruts, avec des annotations de validation Jackson. <code class="i">EnregistrerReleve.Commande</code>, lui, parle de <code class="i">StationId</code> et de <code class="i">ReleveTemperature</code>.</p>
+        <p class="lead">C'est le <b class="hl">controleur</b> qui traduit de l'un vers l'autre. Toute la connaissance de HTTP s'arrete a sa porte.</p>
+      </div>
+      <div>
+        <div class="vs" style="grid-template-columns:1fr; gap:12px">
+          <div>
+            <p class="filetag">surveillance/adaptateur/entrant/web/dto/ReleveRequete.java</p>
+            <pre class="ko"><code data-lang="java">public record ReleveRequete(
+    @NotNull LocalDate jour,
+    @NotNull Double valeur,
+    @NotNull UniteTemperature unite) { }</code></pre>
+          </div>
+          <div>
+            <p class="filetag">surveillance/domaine/port/entrant/EnregistrerReleve.java</p>
+            <pre class="ok"><code data-lang="java">public interface EnregistrerReleve {
+
+  StationId enregistrer(Commande commande);
+
+  // objet de commande : les entrees du cas d'usage,
+  // en langage du domaine (et non un DTO web)
+  record Commande(StationId stationId,
+                  ReleveTemperature releve) { }
+}</code></pre>
+          </div>
+          <div>
+            <p class="filetag">surveillance/adaptateur/entrant/web/StationController.java</p>
+            <pre class="ok"><code data-lang="java">// traduction DTO web -&gt; objets du domaine
+Temperature temperature =
+    Temperature.de(requete.valeur(), requete.unite());
+ReleveTemperature releve =
+    new ReleveTemperature(requete.jour(), temperature);
+
+enregistrerReleve.enregistrer(
+    new EnregistrerReleve.Commande(StationId.de(id), releve));</code></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 36 -->
+  <section class="slide">
+    <p class="num">Ports &middot; 36<span class="disc hex">HEXAGONE</span></p>
+    <div class="cols wide-right">
+      <div>
+        <h2>L'inversion de dependance</h2>
+        <div class="defbox" style="--c:var(--chaud)">
+          <span class="term-en">Dependency inversion</span>
+          <p>L'interface appartient a <b>celui qui appelle</b>, pas a celui qui implemente. Le domaine declare le contrat ; la technique s'y plie.</p>
+        </div>
+        <p class="lead">C'est le mecanisme exact qui rend l'hexagone possible. Sans lui, le domaine devrait importer l'adaptateur pour l'appeler.</p>
+        <p class="lead">La fleche <b class="hl">de compilation</b> pointe vers le domaine : c'est l'adaptateur qui importe l'interface. La fleche <b class="hl">d'execution</b> en sort : au runtime, le domaine appelle bien la base.</p>
+        <p class="lead" style="font-size:14px">Consequence concrete : remplacer H2 par un fichier texte ne touche <b class="hl">pas une ligne</b> du domaine.</p>
+      </div>
+      <div>
+        <p class="filetag">surveillance/domaine/port/sortant/DepotStationMeteo.java</p>
+        <pre><code data-lang="java">// DANS LE DOMAINE : le besoin, en vocabulaire metier.
+// Pas de JPA, pas de SQL, pas de H2 dans cette signature.
+public interface DepotStationMeteo {
+
+  void sauvegarder(StationMeteo station);
+
+  Optional&lt;StationMeteo&gt; parId(StationId id);
+}</code></pre>
+        <p class="filetag" style="margin-top:14px">surveillance/adaptateur/sortant/persistance/StationMeteoPersistenceAdapter.java</p>
+        <pre><code data-lang="java">// DANS L'ADAPTATEUR : comment on le fait vraiment.
+// C'est LUI qui importe le domaine, jamais l'inverse.
+@Component
+public class StationMeteoPersistenceAdapter
+    implements DepotStationMeteo {
+
+  private final StationJpaRepository jpa;
+
+  @Override
+  public void sauvegarder(StationMeteo station) {
+    jpa.save(StationMeteoMapper.versJpa(station));
+  }
+}</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 37 -->
+  <section class="slide">
+    <p class="num">Le point cle &middot; 37<span class="disc hex">HEXAGONE</span></p>
+    <div class="cols wide-left">
+      <div>
+        <h2>Ou Spring rencontre le coeur</h2>
+        <p class="lead">Le domaine et l'application n'ont <b class="hl">aucune</b> annotation Spring. Mais il faut bien que quelqu'un construise les objets et les relie entre eux.</p>
+        <div class="defbox" style="--c:var(--tiede)">
+          <span class="term-en">Composition root</span>
+          <p>L'unique endroit, tout au bord de l'application, ou l'on assemble les objets concrets. Le seul lieu qui a le droit de tout connaitre.</p>
+        </div>
+        <ul class="pts" style="--accent:var(--tiede)">
+          <li>Le coeur reste testable <b>sans demarrer de contexte Spring</b>.</li>
+          <li>On branche les adaptateurs par injection de constructeur.</li>
+          <li>Spring devient un <b>detail remplacable</b>, pas un socle.</li>
+        </ul>
+      </div>
+      <div>
+        <p class="filetag">fr/meteo/config/ConfigurationSurveillance.java</p>
+        <pre><code data-lang="java">@Configuration
+public class ConfigurationSurveillance {
+
+  // le domaine est du Java pur : on l'instancie a la main
+  @Bean
+  public DetecteurCanicule detecteurCanicule() {
+    return new DetecteurCanicule();
+  }
+
+  @Bean
+  public SeuilCanicule seuilCanicule() {
+    return SeuilCanicule.parDefaut();
+  }
+
+  // Spring injecte les adaptateurs derriere les ports
+  @Bean
+  public ServiceDetectionCanicule serviceDetectionCanicule(
+      DepotStationMeteo depotStations,   // -&gt; adaptateur JPA
+      DepotCanicule depotCanicules,      // -&gt; adaptateur JPA
+      NotificateurCanicule notificateur, // -&gt; adaptateur log
+      DetecteurCanicule detecteur,
+      SeuilCanicule seuil) {
+    return new ServiceDetectionCanicule(depotStations,
+        depotCanicules, notificateur, detecteur, seuil);
+  }
+}</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 38 -->
+  <section class="slide">
+    <p class="num">Piege classique &middot; 38<span class="disc ddd">DDD</span><span class="disc hex">HEXAGONE</span></p>
+    <div class="cols wide-left">
+      <div>
+        <h2>Domaine &ne; persistance</h2>
+        <p class="lead">On n'annote <b class="hl">pas</b> l'agregat avec <span style="font-family:var(--font-mono);color:var(--code-ann)">@Entity</span>. Ce serait le raccourci le plus tentant, et il coute cher.</p>
+        <ul class="pts" style="--accent:var(--froid)">
+          <li><b>L'ORM impose ses contraintes</b> <span class="g">: constructeur vide, champs non finaux, setters. Exactement ce qu'un objet-valeur et un agregat refusent.</span></li>
+          <li><b>Le schema de table finirait par dicter le modele metier</b>, <span class="g">au lieu de l'inverse.</span></li>
+          <li><b>Deux modeles</b> <span class="g">: <code>StationMeteo</code> et <code>StationMeteoJpa</code>.</span></li>
+          <li><b>Un mapper</b> <span class="g">traduit entre les deux, a l'interieur de l'adaptateur.</span></li>
+        </ul>
+        <p class="lead" style="margin-top:14px; font-size:14px">Oui, cela fait du code de traduction. C'est le prix, assume, de pouvoir changer de base sans toucher aux regles. Notez que <code class="i">versDomaine</code> passe par <code class="i">reconstituer</code> : les invariants sont <b class="hl">revalides</b> au chargement.</p>
+      </div>
+      <div>
+        <p class="filetag">surveillance/adaptateur/sortant/persistance/StationMeteoJpa.java</p>
+        <pre><code data-lang="java">@Entity
+@Table(name = "stations")
+public class StationMeteoJpa {
+  @Id private UUID id;        // mutable, constructeur vide,
+  private String ville;       // aucune regle metier ici
+  private String codePostal;
+
+  @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
+  private List&lt;ReleveTemperatureJpa&gt; releves = new ArrayList&lt;&gt;();
+
+  protected StationMeteoJpa() { }   // requis par JPA
+}</code></pre>
+        <p class="filetag" style="margin-top:14px">surveillance/adaptateur/sortant/persistance/StationMeteoMapper.java</p>
+        <pre><code data-lang="java">// Persistance -&gt; Domaine : reconstitue un agregat VALIDE
+static StationMeteo versDomaine(StationMeteoJpa jpa) {
+  List&lt;ReleveTemperature&gt; releves = jpa.getReleves().stream()
+      .map(StationMeteoMapper::releveVersDomaine)
+      .toList();
+  return StationMeteo.reconstituer(
+      new StationId(jpa.getId()),
+      new Localisation(jpa.getVille(), jpa.getCodePostal()),
+      releves);
+}</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 39 -->
+  <section class="slide">
+    <p class="num">Piege classique &middot; 39<span class="disc hex">HEXAGONE</span></p>
+    <div class="cols wide-right">
+      <div>
+        <h2>Le domaine ignore HTTP</h2>
+        <p class="lead">Le domaine leve des exceptions au vocabulaire metier : <code class="i">ReleveDejaPresentException</code>, <code class="i">StationIntrouvableException</code>. Il ne sait pas, et ne doit pas savoir, qu'elles deviendront un 409 ou un 404.</p>
+        <p class="lead">La correspondance est un <b class="hl">detail d'adaptateur</b>. Elle vit dans une seule classe de la couche web.</p>
+        <ul class="pts" style="--accent:var(--canicule)">
+          <li><code>ReleveDejaPresentException</code> <span class="g">&rarr; 409 Conflict : l'invariant de l'agregat a ete viole.</span></li>
+          <li><code>StationIntrouvableException</code> <span class="g">&rarr; 404 : erreur d'orchestration, levee par la couche application.</span></li>
+          <li><code>IllegalArgumentException</code> <span class="g">&rarr; 400 : le domaine a refuse une donnee absurde, par exemple sous le zero absolu.</span></li>
+        </ul>
+      </div>
+      <div>
+        <p class="filetag">surveillance/adaptateur/entrant/web/GestionnaireErreursWeb.java</p>
+        <pre><code data-lang="java">@RestControllerAdvice
+public class GestionnaireErreursWeb {
+
+  // invariant "un releve par jour" viole -&gt; 409 Conflict
+  @ExceptionHandler(StationMeteo.ReleveDejaPresentException.class)
+  public ProblemDetail releveDejaPresent(
+      StationMeteo.ReleveDejaPresentException ex) {
+    return ProblemDetail.forStatusAndDetail(
+        HttpStatus.CONFLICT, ex.getMessage());
+  }
+
+  // station demandee inexistante -&gt; 404 Not Found
+  @ExceptionHandler(StationIntrouvableException.class)
+  public ProblemDetail stationIntrouvable(
+      StationIntrouvableException ex) {
+    return ProblemDetail.forStatusAndDetail(
+        HttpStatus.NOT_FOUND, ex.getMessage());
+  }
+
+  // donnee refusee par le domaine (ex : zero absolu) -&gt; 400
+  @ExceptionHandler(IllegalArgumentException.class)
+  public ProblemDetail donneeInvalide(IllegalArgumentException ex) {
+    return ProblemDetail.forStatusAndDetail(
+        HttpStatus.BAD_REQUEST, ex.getMessage());
+  }
+}</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 40 -->
+  <section class="slide">
+    <p class="num">Le garde-fou &middot; 40<span class="disc ddd">DDD</span><span class="disc hex">HEXAGONE</span></p>
+    <div class="cols wide-right">
+      <div>
+        <h2>La regle, rendue executable</h2>
+        <p class="lead">Toutes ces regles ne tiennent que par la discipline. Or la discipline s'erode : un import de trop, un vendredi soir, et le domaine depend de Spring.</p>
+        <p class="lead"><b class="hl">ArchUnit</b> inspecte les dependances entre paquets et casse le build si quelqu'un franchit une frontiere. La documentation ne peut plus mentir : elle est compilee.</p>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin:14px 0">
+          <span class="chip" style="--c:var(--domaine)"><i style="--c:var(--domaine)"></i>30 tests verts</span>
+          <span class="chip" style="--c:var(--froid)"><i style="--c:var(--froid)"></i>dont 7 d'architecture</span>
+        </div>
+        <p class="lead" style="font-size:14px">Les 7 regles se lisent en deux familles : la <b class="hl">regle de dependance</b> a l'interieur d'un contexte (4 regles), et la <b class="hl">frontiere de contexte</b> entre les deux (3 regles, dont celle qui protege la racine de composition).</p>
+      </div>
+      <div>
+        <p class="filetag">test/architecture/ArchitectureHexagonaleTest.java</p>
+        <pre><code data-lang="java">// le coeur des DEUX contextes est du Java pur
+@Test
+void aucun_domaine_ne_depend_d_un_framework() {
+  ArchRule regle = noClasses()
+      .that().resideInAnyPackage(
+          "fr.meteo.surveillance.domaine..",
+          "fr.meteo.maintenance.domaine..")
+      .should().dependOnClassesThat().resideInAnyPackage(FRAMEWORKS)
+      .because("le coeur metier de chaque contexte doit rester "
+             + "du Java pur");
+
+  regle.check(classes);
+}
+
+// la racine de composition connait les contextes, jamais l'inverse
+@Test
+void aucun_contexte_ne_depend_de_la_racine_de_composition() {
+  noClasses().that().resideInAnyPackage(SURVEILLANCE, MAINTENANCE)
+    .should().dependOnClassesThat().resideInAPackage("fr.meteo.config..")
+    .check(classes);
+}</code></pre>
+        <p class="filetag" style="margin-top:14px">Ce que voit le developpeur qui franchit la frontiere</p>
+        <pre class="ko"><code data-lang="java">[ERROR] le_contexte_surveillance_ignore_le_contexte_maintenance
+Architecture Violation [Priority: MEDIUM] - Rule 'no classes
+that reside in a package 'fr.meteo.surveillance..' should
+depend on classes that reside in a package
+'fr.meteo.maintenance..', because le detecteur de canicules
+n'a aucune raison de savoir ce qu'est un etalonnage'
+was violated (1 times)
+
+[INFO] BUILD FAILURE</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 41 -->
+  <section class="slide">
+    <p class="num">Le flux &middot; 41<span class="disc hex">HEXAGONE</span></p>
+    <h2>Une detection, de bout en bout</h2>
+    <div class="card" style="overflow-x:auto">
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-family:var(--font-mono); font-size:clamp(10.5px,1.4vw,13.5px); color:var(--ink-soft)">
+        <span class="fl" style="--c:var(--application)">POST /api/stations/{id}/detection</span><span class="ar">&rarr;</span>
+        <span class="fl" style="--c:var(--application)">CaniculeController</span><span class="ar">&rarr;</span>
+        <span class="fl" style="--c:var(--application)">DetecterCanicules</span><span class="ar">&rarr;</span>
+        <span class="fl" style="--c:var(--application)">ServiceDetectionCanicule</span><span class="ar">&rarr;</span>
+        <span class="fl" style="--c:var(--domaine)">DetecteurCanicule</span><span class="ar">&rarr;</span>
+        <span class="fl" style="--c:var(--chaud)">DepotCanicule</span><span class="ar">&rarr;</span>
+        <span class="fl" style="--c:var(--chaud)">JPA / H2</span><span class="ar">&rarr;</span>
+        <span class="fl" style="--c:var(--canicule)">ALERTE CANICULE</span>
+      </div>
+    </div>
+    <div class="cols" style="margin-top:22px; align-items:start">
+      <div>
+        <p class="filetag">Ce qui bouge</p>
+        <ul class="pts" style="--accent:var(--chaud)">
+          <li>Le controleur : REST aujourd'hui, un message Kafka demain.</li>
+          <li>La base : H2 en demo, PostgreSQL en production.</li>
+          <li>L'alerte : <code>NotificateurCaniculeLog</code> ici, un SMS ensuite.</li>
+        </ul>
+      </div>
+      <div>
+        <p class="filetag">Ce qui ne bouge pas</p>
+        <ul class="pts" style="--accent:var(--domaine)">
+          <li>La definition d'une canicule.</li>
+          <li>L'invariant "un releve par jour".</li>
+          <li>Les 14 tests du domaine surveillance, qui tournent en millisecondes.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 42 -->
+  <section class="slide">
+    <p class="num">A retenir &middot; 42<span class="disc ddd">DDD</span><span class="disc hex">HEXAGONE</span></p>
+    <div class="cols">
+      <div>
+        <h2>Six idees a emporter</h2>
+        <ol class="steps" style="--accent:var(--froid)">
+          <li><b>Cherchez d'abord ou le vocabulaire change de sens.</b> C'est la que passe la frontiere d'un contexte.</li>
+          <li><b>Nommez les choses comme le metier les nomme.</b> Tout le reste en decoule.</li>
+          <li><b>Mettez la regle a cote de la donnee.</b> Un objet qui expose ses champs pour qu'on decide a sa place est anemique.</li>
+          <li><b>Un agregat existe pour proteger un invariant.</b> S'il n'y a rien a proteger, il n'y a pas d'agregat.</li>
+          <li><b>L'interface appartient a l'appelant.</b> C'est l'inversion de dependance, et c'est tout l'hexagone.</li>
+          <li><b>Rendez la regle d'architecture executable.</b> Une convention non testee est deja violee.</li>
+        </ol>
+      </div>
+      <div class="card">
+        <p class="big-quote" style="margin-bottom:18px">Le metier au <em>centre</em>. La technique <em>branchee</em> autour.</p>
+        <p style="margin:0; color:var(--ink-soft); font-size:15px; line-height:1.55">Le controleur, la base et l'alerte sont interchangeables. Le coeur, lui, ne bouge pas. C'est toute la promesse de l'hexagone &mdash; et le DDD est ce qui rend ce coeur digne d'etre protege.</p>
+      </div>
+    </div>
+    <p class="kbd" style="margin-top:24px">Naviguez avec <b>&larr;</b> <b>&rarr;</b> &middot; <b>Espace</b> &middot; ou les fleches en bas a droite. <b>T</b> = theme.</p>
+  </section>
+
+
+<div class="hud">
+  <div class="progress"><i id="prog"></i></div>
+  <div class="counter"><span id="cur">01</span> / <span id="tot">42</span></div>
+</div>
+<div class="nav">
+  <button id="prev" aria-label="Diapositive precedente">&larr;</button>
+  <button id="next" aria-label="Diapositive suivante">&rarr;</button>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  // coloration syntaxique legere du Java : une seule passe, sans re-analyse
+  // de ce qui vient d'etre remplace (le remplacement n'est jamais re-scanne).
+  function highlightJava(escaped) {
+    var re = /(\/\/[^\n]*)|("[^"]*")|(@[A-Za-z][A-Za-z0-9]*)|\b(public|private|protected|final|class|interface|record|enum|return|new|throw|throws|boolean|void|static|import|package|implements|extends|if|else|for|this|instanceof|null)\b|\b([A-Z][A-Za-z0-9]*)\b/g;
+    return escaped.replace(re, function (m, com, str, ann, kw, typ) {
+      if (com) return '<span class="c">' + com + '</span>';
+      if (str) return '<span class="s">' + str + '</span>';
+      if (ann) return '<span class="a">' + ann + '</span>';
+      if (kw)  return '<span class="k">' + kw + '</span>';
+      if (typ) return '<span class="t">' + typ + '</span>';
+      return m;
+    });
+  }
+  document.querySelectorAll('code[data-lang="java"]').forEach(function (el) {
+    el.innerHTML = highlightJava(el.innerHTML);
+  });
+
+  var slides = Array.prototype.slice.call(document.querySelectorAll(".slide"));
+  var i = 0, n = slides.length;
+  var prog = document.getElementById("prog"), cur = document.getElementById("cur"), tot = document.getElementById("tot");
+  tot.textContent = String(n).padStart(2, "0");
+  function pad(x) { return String(x + 1).padStart(2, "0"); }
+  function go(to) {
+    i = Math.max(0, Math.min(n - 1, to));
+    slides.forEach(function (s, k) { s.classList.toggle("active", k === i); });
+    slides[i].scrollTop = 0;
+    prog.style.width = ((i + 1) / n * 100) + "%";
+    cur.textContent = pad(i);
+    try { history.replaceState(null, "", "#" + (i + 1)); } catch (e) {}
+  }
+  document.getElementById("next").addEventListener("click", function () { go(i + 1); });
+  document.getElementById("prev").addEventListener("click", function () { go(i - 1); });
+  document.addEventListener("keydown", function (e) {
+    var tag = (e.target && e.target.tagName) || "";
+    if (tag === "INPUT" || tag === "TEXTAREA") return;
+    if (e.key === "ArrowRight" || e.key === " " || e.key === "PageDown") { e.preventDefault(); go(i + 1); }
+    else if (e.key === "ArrowLeft" || e.key === "PageUp") { e.preventDefault(); go(i - 1); }
+    else if (e.key === "Home") go(0);
+    else if (e.key === "End") go(n - 1);
+    else if (e.key === "t" || e.key === "T") {
+      var root = document.documentElement;
+      var isDark = root.getAttribute("data-theme") === "dark" || (!root.getAttribute("data-theme") && window.matchMedia("(prefers-color-scheme: dark)").matches);
+      root.setAttribute("data-theme", isDark ? "light" : "dark");
+    }
+  });
+  var startX = null;
+  document.addEventListener("touchstart", function (e) { startX = e.touches[0].clientX; }, { passive: true });
+  document.addEventListener("touchend", function (e) {
+    if (startX === null) return;
+    var dx = e.changedTouches[0].clientX - startX;
+    if (Math.abs(dx) > 50) go(i + (dx < 0 ? 1 : -1));
+    startX = null;
+  });
+  var h = parseInt((location.hash || "#1").slice(1), 10);
+  go(isNaN(h) ? 0 : h - 1);
+})();
+</script>
+</body>
+</html>
