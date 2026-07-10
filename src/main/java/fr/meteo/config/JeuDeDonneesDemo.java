@@ -1,12 +1,15 @@
 package fr.meteo.config;
 
-import fr.meteo.domaine.modele.Localisation;
-import fr.meteo.domaine.modele.ReleveTemperature;
-import fr.meteo.domaine.modele.StationId;
-import fr.meteo.domaine.modele.Temperature;
-import fr.meteo.domaine.port.entrant.CreerStation;
-import fr.meteo.domaine.port.entrant.DetecterCanicules;
-import fr.meteo.domaine.port.entrant.EnregistrerReleve;
+import fr.meteo.surveillance.domaine.modele.Localisation;
+import fr.meteo.surveillance.domaine.modele.ReleveTemperature;
+import fr.meteo.surveillance.domaine.modele.StationId;
+import fr.meteo.surveillance.domaine.modele.Temperature;
+import fr.meteo.surveillance.domaine.port.entrant.CreerStation;
+import fr.meteo.surveillance.domaine.port.entrant.DetecterCanicules;
+import fr.meteo.surveillance.domaine.port.entrant.EnregistrerReleve;
+import fr.meteo.maintenance.domaine.modele.NumeroSerie;
+import fr.meteo.maintenance.domaine.modele.Station;
+import fr.meteo.maintenance.domaine.port.sortant.DepotStation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
@@ -30,13 +33,16 @@ public class JeuDeDonneesDemo implements CommandLineRunner {
     private final CreerStation creerStation;
     private final EnregistrerReleve enregistrerReleve;
     private final DetecterCanicules detecterCanicules;
+    private final DepotStation depotMaintenance;
 
     public JeuDeDonneesDemo(CreerStation creerStation,
                             EnregistrerReleve enregistrerReleve,
-                            DetecterCanicules detecterCanicules) {
+                            DetecterCanicules detecterCanicules,
+                            DepotStation depotMaintenance) {
         this.creerStation = creerStation;
         this.enregistrerReleve = enregistrerReleve;
         this.detecterCanicules = detecterCanicules;
+        this.depotMaintenance = depotMaintenance;
     }
 
     @Override
@@ -56,6 +62,17 @@ public class JeuDeDonneesDemo implements CommandLineRunner {
 
         int nb = detecterCanicules.detecterPour(lyon).size();
         log.info("Jeu de donnees demo pret. Station Lyon {} -> {} canicule(s) detectee(s).", lyon, nb);
+
+        // Le MEME boitier physique, vu par le contexte maintenance.
+        // Les deux contextes ne partagent que la valeur brute de l'identifiant :
+        // on traverse la frontiere par un UUID, jamais par une classe.
+        depotMaintenance.sauvegarder(new Station(
+                new fr.meteo.maintenance.domaine.modele.StationId(lyon.valeur()),
+                new NumeroSerie("MF-004217"),
+                LocalDate.of(2025, 6, 1)));
+
         log.info("Essayez : GET http://localhost:8080/api/canicules");
+        log.info("Le meme boitier, deux vues : GET /api/stations/{} ", lyon);
+        log.info("                             GET /api/maintenance/stations/{}", lyon);
     }
 }
